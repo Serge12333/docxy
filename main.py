@@ -961,12 +961,18 @@ def open_list_window(listbox, item_to_edit):
 
 
 # --- Combination Window Functions ---
-def open_combination_window(listbox):
-    """Window to create or edit a 'Combination' tag."""
-    print("DEBUG: Starting open_combination_window function.")
+def open_combination_window(listbox, combination_name=None):
+    """
+    Window to create or edit a 'Combination' tag.
+    If combination_name is provided, it opens in edit mode.
+    """
     combo_window = tk.Toplevel(window)
-    combo_window.title("Создание сочетания")
-    combo_window.geometry("550x700")
+    if combination_name:
+        combo_window.title(f"Редактирование сочетания: {combination_name}")
+    else:
+        combo_window.title("Создание сочетания")
+
+    # Теперь нет фиксированного размера, окно будет подстраиваться под содержимое
     combo_window.resizable(False, False)
     combo_window.focus_set()
     combo_window.grab_set()
@@ -974,17 +980,26 @@ def open_combination_window(listbox):
     name_var = tk.StringVar()
     combination_tags = []
 
-    print("DEBUG: Loading tags from config files.")
-    # Load all available tags (fields, comboboxes, etc.)
+    original_name = None
+    if combination_name:
+        original_name = combination_name
+        combo_config = load_json(COMBINATION_CONFIG_PATH, 'combination_config')
+        for combo in combo_config:
+            if combo['name'] == combination_name:
+                name_var.set(combo['name'])
+                combination_tags.extend(combo['tags'])
+                break
+
     all_tags = set()
-    for config_path in [FIELDS_CONFIG_PATH, COMBOBOX_REGULAR_PATH, COMBOBOX_MAINKEY_PATH]:
+    for config_path in [FIELDS_CONFIG_PATH, COMBOBOX_REGULAR_PATH, COMBOBOX_MAINKEY_PATH, COMBINATION_CONFIG_PATH]:
         cfg = load_json(config_path, '')
-        all_tags.update([item['name'] for item in cfg])
+        if combination_name and config_path == COMBINATION_CONFIG_PATH:
+            all_tags.update([item['name'] for item in cfg if item['name'] != combination_name])
+        else:
+            all_tags.update([item['name'] for item in cfg])
     sorted_tags = sorted(list(all_tags))
-    print(f"DEBUG: Found {len(sorted_tags)} tags.")
 
     def refresh_listbox():
-        """Refreshes the listbox with the current combination elements."""
         for item in combo_listbox.get_children():
             combo_listbox.delete(item)
         for i, tag in enumerate(combination_tags):
@@ -1040,21 +1055,31 @@ def open_combination_window(listbox):
 
         all_configs = (load_json(path, '') for path in
                        [FIELDS_CONFIG_PATH, COMBOBOX_REGULAR_PATH, COMBOBOX_MAINKEY_PATH, COMBINATION_CONFIG_PATH])
-        all_names = {item['name'] for config in all_configs for item in config}
+        all_names = {item['name'] for config in all_configs for item in config if item['name'] != original_name}
         if name in all_names:
             messagebox.showwarning("Ошибка", f"Имя '{name}' уже используется.", parent=combo_window)
             return
 
         combo_data = {"name": name, "type": "текст", "tag_type": "сочетание", "tags": combination_tags}
         combo_config = load_json(COMBINATION_CONFIG_PATH, 'combination_config')
-        combo_config.append(combo_data)
+
+        if original_name:
+            found = False
+            for i, combo in enumerate(combo_config):
+                if combo['name'] == original_name:
+                    combo_config[i] = combo_data
+                    found = True
+                    break
+            if not found:
+                messagebox.showerror("Ошибка", "Не удалось найти сочетание для редактирования.")
+                return
+        else:
+            combo_config.append(combo_data)
+
         save_json(COMBINATION_CONFIG_PATH, combo_config)
         refresh_main_and_constructor()
         combo_window.destroy()
 
-    print("DEBUG: Starting UI layout creation.")
-
-    # New layout: A main content frame and a separate button frame at the bottom.
     content_frame = tk.Frame(combo_window, padx=10, pady=10)
     content_frame.pack(fill="both", expand=True)
 
@@ -1070,7 +1095,6 @@ def open_combination_window(listbox):
     options_frame = tk.Frame(content_frame)
     options_frame.pack(fill="x")
 
-    # Left side for tags
     tag_options_frame = tk.Frame(options_frame)
     tag_options_frame.pack(side="left", padx=(0, 10))
     tk.Label(tag_options_frame, text="Добавить тег:").pack(anchor="w")
@@ -1078,7 +1102,6 @@ def open_combination_window(listbox):
     tag_combo.pack(side="left", fill="x", expand=True, padx=(0, 5))
     tk.Button(tag_options_frame, text="Добавить", command=lambda: add_element(tag_combo.get())).pack(side="left")
 
-    # Right side for literals
     literal_options_frame = tk.Frame(options_frame)
     literal_options_frame.pack(side="left")
     tk.Label(literal_options_frame, text="Добавить текст:").pack(anchor="w")
@@ -1087,7 +1110,6 @@ def open_combination_window(listbox):
     tk.Button(literal_options_frame, text="Добавить", command=lambda: add_element(literal_entry.get())).pack(
         side="left")
 
-    # Literal buttons
     literal_buttons_frame = tk.Frame(content_frame, pady=5)
     literal_buttons_frame.pack(fill="x")
     tk.Button(literal_buttons_frame, text="Пробел", command=lambda: add_element(' ')).pack(side="left", padx=2)
@@ -1117,7 +1139,6 @@ def open_combination_window(listbox):
     tk.Button(actions_frame, text="Вниз", width=12, command=lambda: move_element('down')).pack(side="left", padx=2)
 
     refresh_listbox()
-    print("DEBUG: Finished UI layout creation. Buttons should be visible now.")
 
 
 def load_combination_config():
@@ -1155,25 +1176,28 @@ def load_combination_config():
 
 
 def open_edit_tag_window(listbox):
-    """Determines which editor to open based on the selected tag type."""
+    """Opens an editing window for the selected tag based on its type."""
     selected_item = listbox.selection()
     if not selected_item:
-        messagebox.showwarning("Ошибка", "Выберите тег для редактирования")
+        messagebox.showwarning("Предупреждение", "Выберите тег для редактирования.")
         return
 
-    item_id = selected_item[0]
-    values = listbox.item(item_id, "values")
-    tag_type = values[2]
+    # ЭТИ ДВЕ СТРОКИ ДОЛЖНЫ БЫТЬ ВЫПОЛНЕНЫ ПЕРЕД БЛОКОМ if/elif
+    item_values = listbox.item(selected_item)['values']
+    item_name = item_values[0]
+    tag_type = item_values[2]
 
     if tag_type == 'поле':
-        open_field_window(listbox, item_id)
-    elif tag_type == 'чекбокс':
-        open_checkbox_window(listbox, item_id)
-    elif tag_type in ['список', 'комбобокс']:
-        # This now calls the list editor for both list types
-        open_list_window(listbox, item_id)
+        # Здесь должна быть функция для редактирования "поля"
+        messagebox.showinfo("Информация", f"Редактирование для '{tag_type}' в разработке.")
+    elif tag_type == 'список' or tag_type == 'комбобокс':
+        # Здесь должна быть функция для редактирования "списка"
+        messagebox.showinfo("Информация", f"Редактирование для '{tag_type}' в разработке.")
+    elif tag_type == 'сочетание':
+        # Теперь item_name определена и может быть передана в функцию
+        open_combination_window(listbox, combination_name=item_name)
     else:
-        messagebox.showinfo("Информация", f"Редактирование для типа '{tag_type}' пока не реализовано.")
+        messagebox.showinfo("Информация", f"Редактирование для '{tag_type}' в разработке.")
 
 
 def delete_tag(listbox):
