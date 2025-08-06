@@ -212,7 +212,132 @@ def submit_and_save():
         messagebox.showerror(title="Ошибка!", message=f"Произошла ошибка при формировании документов: {e}")
 
 
-# --- UI Generation for Dynamic Fields ---
+def import_fields():
+    global dynamic_frame
+    # Prompt user for confirmation
+    if not messagebox.askyesno("Подтверждение", "Вы уверены, что хотите импортировать поля из файла 'field_import'?"):
+        return
+
+    # Define file paths
+    xlsx_path = r"D:\document_filler\field_import.xlsx"
+    xls_path = r"D:\document_filler\field_import.xls"
+    file_path = None
+
+    # Check for file existence, prioritizing .xlsx
+    if os.path.exists(xlsx_path):
+        file_path = xlsx_path
+    elif os.path.exists(xls_path):
+        file_path = xls_path
+    else:
+        messagebox.showerror("Ошибка", "Ошибка: Файл 'field_import' не найден.")
+        return
+
+    try:
+        # Load Excel file
+        wb = openpyxl.load_workbook(file_path)
+        sheet = wb.active
+
+        # Validate at least two columns
+        if sheet.max_column < 2:
+            messagebox.showerror("Ошибка",
+                                 "Ошибка: Файл 'field_import' поврежден или не содержит двух столбцов с данными.")
+            return
+
+        # Initialize counters and tracking
+        fields_created = 0
+        values_imported = 0
+        processed_names = set()  # Track field names (case-insensitive)
+        value_map = {}  # Store values for reapplying after refresh
+
+        # Load all config files
+        fields_config = load_json(FIELDS_CONFIG_PATH, [])
+        combobox_regular = load_json(COMBOBOX_REGULAR_PATH, [])
+        combobox_mainkey = load_json(COMBOBOX_MAINKEY_PATH, [])
+        combination_config = load_json(COMBINATION_CONFIG_PATH, [])
+
+        # Process Excel rows
+        for row in sheet.iter_rows(values_only=True):
+            field_name = row[0]
+            field_value = row[1]
+
+            # Skip rows with empty field name
+            if not field_name or not str(field_name).strip():
+                continue
+
+            # Check for duplicate field name (case-insensitive)
+            field_name_lower = str(field_name).lower()
+            if field_name_lower in processed_names:
+                continue
+            processed_names.add(field_name_lower)
+
+            # Store value for later use (even if empty)
+            value_map[field_name_lower] = str(field_value) if field_value is not None else ""
+
+            # Check if field exists in any config (case-insensitive)
+            exists = False
+            tag_type = None
+            for config in [fields_config, combobox_regular, combobox_mainkey, combination_config]:
+                for item in config:
+                    if item.get("name", "").lower() == field_name_lower:
+                        exists = True
+                        tag_type = item.get("tag_type")
+                        break
+                if exists:
+                    break
+
+            if exists:
+                # If field exists and is type "поле", update its value
+                if tag_type == "поле":
+                    found = False
+                    for widget in dynamic_frame.winfo_children():
+                        if hasattr(widget, "_name") and widget._name.lower() == field_name_lower and isinstance(widget,
+                                                                                                                tk.Entry):
+                            widget.delete(0, tk.END)
+                            widget.insert(0, value_map[field_name_lower])
+                            values_imported += 1
+                            found = True
+                            break
+                    if not found:
+                        print(f"Warning: No Entry widget found for existing field '{field_name}'")
+                # Skip non-"поле" fields
+                continue
+
+            # Create new field if unique
+            if field_name_lower not in [item["name"].lower() for config in
+                                        [fields_config, combobox_regular, combobox_mainkey, combination_config] for item
+                                        in config]:
+                fields_config.append({
+                    "name": str(field_name),
+                    "type": "текст",
+                    "tag_type": "поле"
+                })
+                # Add widget to dynamic_frame with value
+                add_dynamic_widget(str(field_name), "текст", "поле", value_map[field_name_lower])
+                fields_created += 1
+                values_imported += 1  # Count value even if empty, as it's applied
+
+        # Save updated fields config
+        save_json(FIELDS_CONFIG_PATH, fields_config)
+
+        # Refresh UI and reapply values
+        refresh_main_and_constructor()
+
+        # Reapply values to all Entry widgets
+        for widget in dynamic_frame.winfo_children():
+            if hasattr(widget, "_name") and isinstance(widget, tk.Entry):
+                field_name_lower = widget._name.lower()
+                if field_name_lower in value_map:
+                    widget.delete(0, tk.END)
+                    widget.insert(0, value_map[field_name_lower])
+
+        # Show feedback
+        messagebox.showinfo("Импорт завершен",
+                            f"{fields_created} полей было импортировано, {values_imported} значений было импортировано.")
+
+    except Exception as e:
+        messagebox.showerror("Ошибка", "Ошибка: Файл 'field_import' поврежден или не содержит двух столбцов с данными.")
+        print(f"Import error: {str(e)}")
+
 
 def get_next_grid_position():
     """Calculates the next grid position (row, column) based on a 30-widget-per-column rule."""
@@ -245,7 +370,9 @@ def add_dynamic_widget(name, data_type, tag_type, values=None, main_key_data=Non
     if tag_type == "поле":
         entry = tk.Entry(dynamic_frame, width=25)
         entry._name = name
-        # You can add validation logic here if needed based on data_type
+        if values is not None:  # Set value if provided
+            entry.delete(0, tk.END)
+            entry.insert(0, str(values))
         entry.grid(row=row, column=base_col + 1, padx=5, pady=2, sticky="w")
     elif tag_type == "чекбокс":
         var = tk.IntVar()
@@ -1931,6 +2058,7 @@ try:
     window.iconphoto(True, icon)
 except tk.TclError:
     print("Warning: Icon file not found or invalid format.")
+window.resizable(False, False)
 
 # Main layout frames
 # This frame will hold the dynamic widgets and expand with them
@@ -1947,6 +2075,7 @@ bottom_frame.pack(fill="x", padx=10, pady=(0, 10))
 # --- Bottom Buttons ---
 constructor_button = ttk.Button(bottom_frame, text="Конструктор", command=open_constructor_window)
 report_button = ttk.Button(bottom_frame, text="Сформировать", command=submit_and_save)
+ttk.Button(bottom_frame, text="Импорт", command=import_fields).pack(side=LEFT, padx=5, pady=5, fill=X, expand=True)
 constructor_button.pack(side=LEFT, padx=5, pady=5, fill=X, expand=True)
 report_button.pack(side=LEFT, padx=5, pady=5, fill=X, expand=True)
 
