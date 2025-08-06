@@ -74,6 +74,43 @@ def save_json(file_path, data):
         if os.path.exists(temp_file):
             os.remove(temp_file)
 
+def populate_tags_listbox(tags_listbox):
+    """Populates the tags listbox in the constructor window."""
+    for i in tags_listbox.get_children():
+        tags_listbox.delete(i)
+
+    all_items = []
+    all_items.extend(
+        [(f['name'], f['type'], f.get('tag_type', 'поле')) for f in load_json(FIELDS_CONFIG_PATH, 'fields_config')])
+    all_items.extend([(c['name'], c['type'], c.get('tag_type', 'комбобокс')) for c in
+                      load_json(COMBOBOX_REGULAR_PATH, 'combobox_regular')])
+    all_items.extend([(c['name'], c['type'], c.get('tag_type', 'список')) for c in
+                      load_json(COMBOBOX_MAINKEY_PATH, 'combobox_mainkey')])
+
+    try:
+        combination_config = load_combination_config()
+        for combo in combination_config:
+            all_items.append((combo['name'], combo['type'], combo.get('tag_type', 'сочетание')))
+    except Exception as e:
+        messagebox.showerror("Ошибка", f"Ошибка при загрузке combination_config: {str(e)}")
+
+    all_items.sort(key=lambda x: x[0])
+    for item in all_items:
+        tags_listbox.insert("", "end", values=item)
+
+
+def refresh_all_windows(listbox_to_refresh):
+    """Refreshes the dynamic widgets in the main window and the constructor listbox."""
+    global dynamic_frame
+    if dynamic_frame and dynamic_frame.winfo_exists():
+        for widget in dynamic_frame.winfo_children():
+            widget.destroy()
+        load_all_dynamic_widgets()
+
+    # Refresh the constructor's listbox
+    if listbox_to_refresh and listbox_to_refresh.winfo_exists():
+        populate_tags_listbox(listbox_to_refresh)
+
 def get_common_merge_data():
     """Collects data from all dynamically created UI elements for the mail merge."""
     global dynamic_frame
@@ -505,32 +542,7 @@ def open_constructor_window():
               command=lambda: open_edit_tag_window(tags_listbox)).pack(side=TOP, pady=2)
     tk.Button(tags_buttons_frame, text="Удалить", width=14, command=lambda: delete_tag(tags_listbox)).pack(side=TOP,
                                                                                                            pady=2)
-
-    def populate_tags_listbox():
-        for i in tags_listbox.get_children():
-            tags_listbox.delete(i)
-
-        all_items = []
-        all_items.extend(
-            [(f['name'], f['type'], f.get('tag_type', 'поле')) for f in load_json(FIELDS_CONFIG_PATH, 'fields_config')])
-        all_items.extend([(c['name'], c['type'], c.get('tag_type', 'комбобокс')) for c in
-                          load_json(COMBOBOX_REGULAR_PATH, 'combobox_regular')])
-        all_items.extend([(c['name'], c['type'], c.get('tag_type', 'список')) for c in
-                          load_json(COMBOBOX_MAINKEY_PATH, 'combobox_mainkey')])
-
-        # This is the new part for combinations
-        try:
-            combination_config = load_combination_config()
-            for combo in combination_config:
-                all_items.append((combo['name'], combo['type'], combo.get('tag_type', 'сочетание')))
-        except Exception as e:
-            messagebox.showerror("Ошибка", f"Ошибка при загрузке combination_config: {str(e)}")
-
-        all_items.sort(key=lambda x: x[0])
-        for item in all_items:
-            tags_listbox.insert("", "end", values=item)
-
-    populate_tags_listbox()
+    populate_tags_listbox(tags_listbox)
 
     # --- Rules Tab ---
     rules_tab = ttk.Frame(notebook)
@@ -587,8 +599,7 @@ def open_new_tag_window(listbox):
               command=lambda: [new_window.destroy(), open_list_window(listbox, None)]).pack(pady=5)
     tk.Button(btn_frame, text="ЧЕКБОКС", width=15, height=2,
               command=lambda: [new_window.destroy(), open_checkbox_window(listbox, None)]).pack(pady=5)
-    tk.Button(btn_frame, text="СОЧЕТАНИЕ", width=15, height=2,
-              command=lambda: [new_window.destroy(), open_combination_window(listbox)]).pack(pady=5)
+    tk.Button(btn_frame, text="СОЧЕТАНИЕ", width=15, height=2, command=lambda: [new_window.destroy(), open_combination_window(listbox, None)]).pack(pady=5)
 
 
 def open_field_window(listbox, item_to_edit):
@@ -624,28 +635,6 @@ def open_field_window(listbox, item_to_edit):
     for text, value in types:
         tk.Radiobutton(type_frame, text=text, value=value, variable=type_var).pack(side=LEFT, padx=5)
 
-    def refresh_main_and_constructor():
-        """Refreshes the dynamic widgets in the main window and the tags in the constructor window."""
-        global dynamic_frame
-        if dynamic_frame and dynamic_frame.winfo_exists():
-            for widget in dynamic_frame.winfo_children():
-                widget.destroy()
-            load_all_dynamic_widgets()
-
-        # Refresh constructor listbox if it's open
-        # We now look for the `constructor_window` object directly, not by title
-        global constructor_window
-        if 'constructor_window' in globals() and constructor_window.winfo_exists():
-            for child in constructor_window.winfo_children():
-                if isinstance(child, ttk.Notebook):
-                    tags_tab = child.winfo_children()[0]
-                    for grand_child in tags_tab.winfo_children():
-                        if isinstance(grand_child, tk.Frame):
-                            for great_grand_child in grand_child.winfo_children():
-                                if isinstance(great_grand_child, ttk.Treeview):
-                                    populate_tags_listbox_in_constructor(great_grand_child)
-                                    return
-
     def save_field():
         name = name_var.get().strip()
         data_type = type_var.get()
@@ -672,7 +661,7 @@ def open_field_window(listbox, item_to_edit):
             fields_config.append({'name': name, 'type': data_type, 'tag_type': 'поле'})
 
         save_json(FIELDS_CONFIG_PATH, fields_config)
-        refresh_main_and_constructor()
+        refresh_all_windows(listbox)
         field_window.destroy()
 
     btn_frame = tk.Frame(field_window)
@@ -705,24 +694,6 @@ def open_checkbox_window(listbox, item_to_edit):
     name_entry.pack(pady=5, padx=10)
     name_entry.focus()
 
-    def refresh_main_and_constructor():
-        # This function is a bit of a kludge, a better architecture would use a MVC pattern or observer pattern
-        # to notify the constructor window to refresh itself.
-        for widget in dynamic_frame.winfo_children():
-            widget.destroy()
-        load_all_dynamic_widgets()
-        for w in window.winfo_children():
-            if isinstance(w, tk.Toplevel) and w.title() == "Конструктор":
-                for child in w.winfo_children():
-                    if isinstance(child, ttk.Notebook):
-                        tab_frame = child.winfo_children()[0]
-                        for grandchild in tab_frame.winfo_children():
-                            if isinstance(grandchild, tk.Frame):
-                                for great_grandchild in grandchild.winfo_children():
-                                    if isinstance(great_grandchild, ttk.Treeview):
-                                        populate_tags_listbox_in_constructor(great_grandchild)
-                                        return
-
     def save_checkbox():
         name = name_var.get().strip()
         if not name:
@@ -747,7 +718,7 @@ def open_checkbox_window(listbox, item_to_edit):
             fields_config.append({'name': name, 'type': 'чекбокс', 'tag_type': 'чекбокс'})
 
         save_json(FIELDS_CONFIG_PATH, fields_config)
-        refresh_main_and_constructor()
+        refresh_all_windows(listbox)
         cb_window.destroy()
 
     btn_frame = tk.Frame(cb_window)
@@ -886,7 +857,7 @@ def open_list_window(listbox, item_to_edit):
     def save_combobox():
         name = name_var.get().strip()
         if not name:
-            messagebox.showwarning("Ошибка", "Введите имя списка", parent=list_window)
+            messagebox.showwarning("Ошибка", "Введите имя списка.", parent=list_window)
             return
 
         all_configs = (load_json(path, '') for path in
@@ -934,7 +905,7 @@ def open_list_window(listbox, item_to_edit):
         final_config.append(combo_data)
         save_json(config_path, final_config)
 
-        refresh_main_and_constructor()
+        refresh_all_windows(listbox)
         list_window.destroy()
 
     # --- The rest of the window setup remains the same ---
@@ -1006,40 +977,40 @@ def open_list_window(listbox, item_to_edit):
 
 
 # --- Combination Window Functions ---
-def open_combination_window(listbox, combination_name=None):
+def open_combination_window(listbox, item_to_edit):
     """
     Window to create or edit a 'Combination' tag.
-    If combination_name is provided, it opens in edit mode.
+    If item_to_edit is provided, it opens in edit mode.
     """
-    combo_window = tk.Toplevel(window)
-    if combination_name:
-        combo_window.title(f"Редактирование сочетания: {combination_name}")
-    else:
-        combo_window.title("Создание сочетания")
+    is_edit = item_to_edit is not None
+    title = "Редактирование сочетания" if is_edit else "Создание сочетания"
 
-    # Теперь нет фиксированного размера, окно будет подстраиваться под содержимое
+    combo_window = tk.Toplevel(window)
+    combo_window.title(title)
     combo_window.resizable(False, False)
     combo_window.focus_set()
     combo_window.grab_set()
 
     name_var = tk.StringVar()
     combination_tags = []
+    old_name = None
 
-    original_name = None
-    if combination_name:
-        original_name = combination_name
+    if is_edit:
+        old_name, _, _ = listbox.item(item_to_edit)['values']
         combo_config = load_json(COMBINATION_CONFIG_PATH, 'combination_config')
-        for combo in combo_config:
-            if combo['name'] == combination_name:
-                name_var.set(combo['name'])
-                combination_tags.extend(combo['tags'])
-                break
+        existing_combo_data = next((item for item in combo_config if item['name'] == old_name), None)
+        if existing_combo_data:
+            name_var.set(existing_combo_data['name'])
+            combination_tags.extend(existing_combo_data['tags'])
+        else:
+            messagebox.showwarning("Ошибка", "Данные сочетания не найдены.")
+            return
 
     all_tags = set()
     for config_path in [FIELDS_CONFIG_PATH, COMBOBOX_REGULAR_PATH, COMBOBOX_MAINKEY_PATH, COMBINATION_CONFIG_PATH]:
         cfg = load_json(config_path, '')
-        if combination_name and config_path == COMBINATION_CONFIG_PATH:
-            all_tags.update([item['name'] for item in cfg if item['name'] != combination_name])
+        if is_edit and config_path == COMBINATION_CONFIG_PATH:
+            all_tags.update([item['name'] for item in cfg if item['name'] != old_name])
         else:
             all_tags.update([item['name'] for item in cfg])
     sorted_tags = sorted(list(all_tags))
@@ -1087,7 +1058,8 @@ def open_combination_window(listbox, combination_name=None):
         elif direction == 'down' and index < len(combination_tags) - 1:
             combination_tags[index], combination_tags[index + 1] = combination_tags[index + 1], combination_tags[index]
         refresh_listbox()
-        combo_listbox.selection_set(combo_listbox.get_children()[index + (1 if direction == 'down' else -1)])
+        new_selection_index = index + (1 if direction == 'down' else -1)
+        combo_listbox.selection_set(combo_listbox.get_children()[new_selection_index])
 
     def save_combination():
         name = name_var.get().strip()
@@ -1100,7 +1072,7 @@ def open_combination_window(listbox, combination_name=None):
 
         all_configs = (load_json(path, '') for path in
                        [FIELDS_CONFIG_PATH, COMBOBOX_REGULAR_PATH, COMBOBOX_MAINKEY_PATH, COMBINATION_CONFIG_PATH])
-        all_names = {item['name'] for config in all_configs for item in config if item['name'] != original_name}
+        all_names = {item['name'] for config in all_configs for item in config if item['name'] != old_name}
         if name in all_names:
             messagebox.showwarning("Ошибка", f"Имя '{name}' уже используется.", parent=combo_window)
             return
@@ -1108,10 +1080,10 @@ def open_combination_window(listbox, combination_name=None):
         combo_data = {"name": name, "type": "текст", "tag_type": "сочетание", "tags": combination_tags}
         combo_config = load_json(COMBINATION_CONFIG_PATH, 'combination_config')
 
-        if original_name:
+        if is_edit:
             found = False
             for i, combo in enumerate(combo_config):
-                if combo['name'] == original_name:
+                if combo['name'] == old_name:
                     combo_config[i] = combo_data
                     found = True
                     break
@@ -1122,7 +1094,7 @@ def open_combination_window(listbox, combination_name=None):
             combo_config.append(combo_data)
 
         save_json(COMBINATION_CONFIG_PATH, combo_config)
-        refresh_main_and_constructor()
+        refresh_all_windows(listbox)
         combo_window.destroy()
 
     content_frame = tk.Frame(combo_window, padx=10, pady=10)
@@ -1221,28 +1193,32 @@ def load_combination_config():
 
 
 def open_edit_tag_window(listbox):
-    """Opens an editing window for the selected tag based on its type."""
+    """Opens the appropriate window for editing a selected tag."""
     selected_item = listbox.selection()
     if not selected_item:
-        messagebox.showwarning("Предупреждение", "Выберите тег для редактирования.")
+        messagebox.showwarning("Ошибка", "Выберите тег для редактирования.", parent=listbox)
         return
 
-    # ЭТИ ДВЕ СТРОКИ ДОЛЖНЫ БЫТЬ ВЫПОЛНЕНЫ ПЕРЕД БЛОКОМ if/elif
-    item_values = listbox.item(selected_item)['values']
-    item_name = item_values[0]
+    item_id = selected_item[0]
+    item_values = listbox.item(item_id)['values']
+
+    if not item_values or len(item_values) < 3:
+        messagebox.showwarning("Ошибка", "Некорректные данные тега.", parent=listbox)
+        return
+
     tag_type = item_values[2]
 
+    # Pass the listbox and the item_id to the specific edit window
     if tag_type == 'поле':
-        # Здесь должна быть функция для редактирования "поля"
-        messagebox.showinfo("Информация", f"Редактирование для '{tag_type}' в разработке.")
-    elif tag_type == 'список' or tag_type == 'комбобокс':
-        # Здесь должна быть функция для редактирования "списка"
-        messagebox.showinfo("Информация", f"Редактирование для '{tag_type}' в разработке.")
+        open_field_window(listbox, item_id)
+    elif tag_type == 'чекбокс':
+        open_checkbox_window(listbox, item_id)
+    elif tag_type == 'комбобокс' or tag_type == 'список':
+        open_list_window(listbox, item_id)
     elif tag_type == 'сочетание':
-        # Теперь item_name определена и может быть передана в функцию
-        open_combination_window(listbox, combination_name=item_name)
+        open_combination_window(listbox, item_id)
     else:
-        messagebox.showinfo("Информация", f"Редактирование для '{tag_type}' в разработке.")
+        messagebox.showinfo("Информация", "Редактирование для этого типа тега еще не реализовано.")
 
 
 def delete_tag(listbox):
@@ -1299,23 +1275,26 @@ def populate_tags_listbox_in_constructor(listbox):
 
 
 def refresh_main_and_constructor():
-    # Refresh main UI widgets
-    for widget in dynamic_frame.winfo_children():
-        widget.destroy()
-    load_all_dynamic_widgets()
+    """Refreshes the dynamic widgets in the main window and the tags in the constructor window."""
+    global dynamic_frame
+    if dynamic_frame and dynamic_frame.winfo_exists():
+        for widget in dynamic_frame.winfo_children():
+            widget.destroy()
+        load_all_dynamic_widgets()
 
-    # Refresh constructor listbox if it's open
-    for w in window.winfo_children():
-        if isinstance(w, tk.Toplevel) and w.title() == "Конструктор" and w.winfo_exists():
-            for child in w.winfo_children():
-                if isinstance(child, ttk.Notebook):
-                    tab_frame = child.winfo_children()[0]
-                    for grandchild in tab_frame.winfo_children():
-                        if isinstance(grandchild, tk.Frame):
-                            for great_grandchild in grandchild.winfo_children():
-                                if isinstance(great_grandchild, ttk.Treeview):
-                                    populate_tags_listbox_in_constructor(great_grandchild)
+    # Find and refresh the constructor's tags listbox if it is open
+    for child in window.winfo_children():
+        if isinstance(child, tk.Toplevel) and child.title() == "Конструктор":
+            for grand_child in child.winfo_children():
+                if isinstance(grand_child, ttk.Notebook):
+                    tags_tab = grand_child.winfo_children()[0]
+                    for great_grand_child in tags_tab.winfo_children():
+                        if isinstance(great_grand_child, tk.Frame):
+                            for great_great_grand_child in great_grand_child.winfo_children():
+                                if isinstance(great_great_grand_child, ttk.Treeview):
+                                    populate_tags_listbox(great_great_grand_child)
                                     return
+
 def evaluate_condition(condition, merge_data):
     """
     Evaluate a single condition against the main window's tag value.
