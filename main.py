@@ -1577,6 +1577,7 @@ def open_create_rule_window(listbox, constructor_window):
         save_json(RULES_CONFIG_PATH, rules_config)
         messagebox.showinfo("Успех", f"Правило '{rule_name}' успешно создано.")
         update_rules_listbox(rules_config, listbox)
+        listbox.update_idletasks()
         create_rule_window.destroy()
 
     button_frame = tk.Frame(create_rule_window)
@@ -1864,7 +1865,7 @@ def open_edit_rule_window(listbox, constructor_window):
             'behaviors': behaviors
         })
 
-        save_json(RULES_CONFIG_PATH, {'rules_config': updated_rules})
+        save_json(RULES_CONFIG_PATH, updated_rules)
         messagebox.showinfo("Успех", f"Правило '{new_rule_name}' успешно обновлено.")
         update_rules_listbox(updated_rules, listbox)
         edit_rule_window.destroy()
