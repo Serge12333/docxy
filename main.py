@@ -74,93 +74,6 @@ def save_json(file_path, data):
         if os.path.exists(temp_file):
             os.remove(temp_file)
 
-
-# --- Rule Engine and MailMerge Data Preparation ---
-
-def evaluate_condition(condition, merge_data):
-    """Evaluates a single rule condition against the merge data."""
-    tag = condition['tag']
-    cond_type = condition['condition']
-    rule = condition['rule']
-
-    if tag not in merge_data:
-        return False
-
-    value = merge_data[tag]
-    try:
-        if cond_type == 'содержит':
-            return rule.lower() in str(value).lower()
-        elif cond_type == 'начинается с':
-            return str(value).lower().startswith(rule.lower())
-        elif cond_type == 'заканчивается на':
-            return str(value).lower().endswith(rule.lower())
-        elif cond_type == 'больше':
-            return float(value) > float(rule)
-        elif cond_type == 'меньше':
-            return float(value) < float(rule)
-        elif cond_type == 'равно':
-            # Handle checkbox "1"/"0" vs numeric equality
-            if tag in checkbox_vars:
-                return str(value) == str(rule)
-            else:
-                return float(value) == float(rule)
-        elif cond_type == 'True':
-            return value == "1"
-        elif cond_type == 'False':
-            return value == "0"
-        else:
-            return False
-    except (ValueError, TypeError):
-        return False
-
-
-def apply_behaviors(behaviors, merge_data):
-    """Applies rule behaviors to modify the merge data."""
-    for behavior in behaviors:
-        tag = behavior['tag']
-        action = behavior['condition']
-        rule = behavior['rule']
-        if tag not in merge_data:
-            continue
-        value = str(merge_data[tag])
-        try:
-            if action == "очистить":
-                merge_data[tag] = ""
-            elif action == "очистить при не выполнении":
-                merge_data[tag] = ""
-            elif action == "CAPS":
-                merge_data[tag] = value.upper()
-            elif action == "верхняя буква":
-                merge_data[tag] = value.capitalize()
-            elif action == "нижняя буква":
-                merge_data[tag] = value.lower()
-            elif action == "транслит":
-                merge_data[tag] = translit(value, rule)
-            elif action == "добавить текст в начале":
-                merge_data[tag] = rule + value
-            elif action == "добавить текст в конце":
-                merge_data[tag] = value + rule
-            elif action == "добавить дату":
-                date = datetime.strptime(value, '%d.%m.%Y')
-                days = int(rule)
-                merge_data[tag] = (date + timedelta(days=days)).strftime('%d.%m.%Y')
-            elif action == "отнять дату":
-                date = datetime.strptime(value, '%d.%m.%Y')
-                days = int(rule)
-                merge_data[tag] = (date - timedelta(days=days)).strftime('%d.%m.%Y')
-            elif action == "обрезать":
-                if ':' not in rule:
-                    raise ValueError("Rule must be in 'start:end' format")
-                start, end = map(int, rule.split(':'))
-                if start <= end:
-                    merge_data[tag] = value[:start] + value[end + 1:] if 0 <= start <= end < len(value) else value
-                else:
-                    merge_data[tag] = value[:end] + value[start + 1:] if 0 <= end <= start < len(value) else value
-        except Exception as e:
-            print(f"Error applying behavior {action} on {tag}: {e}")
-    return merge_data
-
-
 def get_common_merge_data():
     """Collects data from all dynamically created UI elements for the mail merge."""
     global dynamic_frame
@@ -396,27 +309,32 @@ def sort_column(treeview, col, reverse):
 
 
 def update_rules_listbox(rules, listbox):
-    """Refreshes the rules listbox with current data."""
+    # Calculate maximum number of conditions and behaviors, with minimum 1 each
     max_conditions = max((len(rule.get('conditions', [])) for rule in rules), default=1) if rules else 1
     max_behaviors = max((len(rule.get('behaviors', [])) for rule in rules), default=1) if rules else 1
 
+    # Define columns: always include "Имя", "Условие 1", "Поведение 1"
     required_columns = ["Имя"] + [f"Условие {i + 1}" for i in range(max_conditions)] + [f"Поведение {i + 1}" for i in
-                                                                                        range(max_behaviors)]
+                                                                                           range(max_behaviors)]
 
+    # Always set columns to ensure default columns are present
     listbox["columns"] = required_columns
     for col in required_columns:
         listbox.heading(col, text=col, anchor="center")
-        listbox.column(col, width=120, anchor="w", stretch=True)
+        listbox.column(col, anchor="center", stretch=True)
 
+    # Clear existing items
     for item in listbox.get_children():
         listbox.delete(item)
 
+    # Populate listbox
     for rule in rules:
         name = rule.get('name', '')
         conditions = [f"{c['tag']} {c['condition']} {c['rule']}" for c in rule.get('conditions', [])]
         behaviors = [f"{b['tag']} {b['condition']} {b['rule']}" for b in rule.get('behaviors', [])]
+        # Align values with columns: name, conditions, padding, behaviors, padding
         values = [name] + conditions + [""] * (max_conditions - len(conditions)) + behaviors + [""] * (
-                    max_behaviors - len(behaviors))
+            max_behaviors - len(behaviors))
         listbox.insert("", "end", values=values)
 
 
@@ -445,7 +363,7 @@ def open_constructor_window():
     tags_listbox.heading("Имя", text="Имя", command=lambda: sort_column(tags_listbox, "Имя", False))
     tags_listbox.heading("Тип ввода", text="Тип ввода", command=lambda: sort_column(tags_listbox, "Тип ввода", False))
     tags_listbox.heading("Тип тега", text="Тип тега", command=lambda: sort_column(tags_listbox, "Тип тега", False))
-    tags_listbox.column("Имя", width=250, anchor="w")
+    tags_listbox.column("Имя", width=250, anchor="center")
     tags_listbox.column("Тип ввода", width=120, anchor="center")
     tags_listbox.column("Тип тега", width=120, anchor="center")
 
@@ -1271,22 +1189,733 @@ def refresh_main_and_constructor():
                                 if isinstance(great_grandchild, ttk.Treeview):
                                     populate_tags_listbox_in_constructor(great_grandchild)
                                     return
+def evaluate_condition(condition, merge_data):
+    """
+    Evaluate a single condition against the main window's tag value.
+    Args:
+        condition (dict) {'tag': 'tag_name', 'condition': 'содержит', 'rule': 'value'}
+        merge_data (dict): Data from get_common_merge_data()
+    Returns:
+        bool: True if condition is met, False otherwise
+    """
+    tag = condition['tag']
+    cond_type = condition['condition']
+    rule = condition['rule']
+
+    if tag not in merge_data:
+        return False  # Skip missing tags silently
+
+    value = merge_data[tag]
+    try:
+        if cond_type == 'содержит':
+            return rule.lower() in value.lower()
+        elif cond_type == 'начинается с':
+            return value.lower().startswith(rule.lower())
+        elif cond_type == 'заканчивается на':
+            return value.lower().endswith(rule.lower())
+        elif cond_type == 'больше':
+            return float(value) > float(rule)
+        elif cond_type == 'меньше':
+            return float(value) < float(rule)
+        elif cond_type == 'равно':
+            if tag in checkbox_vars:
+                return value == rule
+            else:
+                return float(value) == float(rule)
+        elif cond_type == 'True':
+            return value == "1"  # Checkbox check
+        elif cond_type == 'False':
+            return value == "0"  # Checkbox check
+        else:
+            return False  # Unknown condition
+    except ValueError:
+        return False  # Invalid numeric conversion
+
+def apply_behaviors(behaviors, merge_data):
+    """
+    Apply behaviors to merge_data.
+    Args:
+        behaviors (list): List of behavior dictionaries from rules_config.json
+        merge_data (dict): Data from get_common_merge_data()
+    Returns:
+        dict: Modified merge_data
+    """
+    for behavior in behaviors:
+        tag = behavior['tag']
+        action = behavior['condition']
+        rule = behavior['rule']
+        if tag not in merge_data:
+            continue
+        value = str(merge_data[tag])  # Convert to string for safety
+        try:
+            if action == "очистить":
+                merge_data[tag] = ""
+            elif action == "очистить при не выполнении":
+                merge_data[tag] = ""
+            elif action == "CAPS":
+                merge_data[tag] = value.upper()
+            elif action == "верхняя буква":
+                merge_data[tag] = value.capitalize()
+            elif action == "нижняя буква":
+                merge_data[tag] = value.lower()
+            elif action == "транслит":
+                merge_data[tag] = translit(value, rule)
+            elif action == "добавить текст в начале":
+                merge_data[tag] = rule + str(value)
+            elif action == "добавить текст в конце":
+                merge_data[tag] = str(value) + rule
+            elif action == "добавить дату":
+                date = datetime.strptime(value, '%d.%m.%Y')
+                days = int(rule)
+                merge_data[tag] = (date + timedelta(days=days)).strftime('%d.%m.%Y')
+            elif action == "отнять дату":
+                date = datetime.strptime(value, '%d.%m.%Y')
+                days = int(rule)
+                merge_data[tag] = (date - timedelta(days=days)).strftime('%d.%m.%Y')
+            elif action == "обрезать":
+                if ':' not in rule:
+                    raise ValueError("Rule must be in 'start:end' format")
+                start, end = map(int, rule.split(':'))
+                if start <= end:
+                    merge_data[tag] = value[:start] + value[end + 1:] if 0 <= start <= end < len(value) else value
+                else:
+                    merge_data[tag] = value[:end] + value[start + 1:] if 0 <= end <= start < len(value) else value
+        except Exception as e:
+            print(f"Error applying behavior {action} on {tag}: {e}")
+    return merge_data
 
 
-# The rule-related functions (create, edit, delete) are very large and complex.
-# Adding them back from the original file would make this response extremely long.
-# I've restored the Rules tab UI. The logic functions (`open_create_rule_window`, etc.)
-# would need to be copied from your original file to make the buttons work.
 def open_create_rule_window(listbox, constructor_window):
-    messagebox.showinfo("Информация", "Создание правил в разработке")
+    create_rule_window = tk.Toplevel()
+    create_rule_window.title("Создать правило")
+    create_rule_window.geometry("1070x230")
+    create_rule_window.resizable(False, False)
+    create_rule_window.focus_set()
+    create_rule_window.grab_set()
+
+    main_frame = tk.Frame(create_rule_window)
+    main_frame.pack(padx=10, pady=5, fill=tk.BOTH, expand=True)
+
+    widgets_3 = []
+    widgets_4 = []
+    rule_widgets = {}
+
+    tk.Label(main_frame, text="Имя правила:").grid(row=0, column=0, padx=5, pady=5, sticky="w")
+    name_var = tk.StringVar()
+    tk.Entry(main_frame, textvariable=name_var, width=30).grid(row=0, column=1, columnspan=5, padx=5, pady=5,
+                                                               sticky="w")
+
+    first_column_frame = tk.Frame(main_frame)
+    first_column_frame.grid(row=2, column=0, columnspan=3, padx=5, pady=5, sticky="w")
+
+    tk.Label(main_frame, text="Теги", anchor="center").grid(row=1, column=0, padx=5, pady=5)
+    tk.Label(main_frame, text="Условие", anchor="center").grid(row=1, column=1, padx=5, pady=5)
+    tk.Label(main_frame, text="Правило", anchor="center").grid(row=1, column=2, padx=5, pady=5)
+
+    tag_var1 = tk.StringVar()
+    tag_combobox1 = ttk.Combobox(first_column_frame, textvariable=tag_var1, width=20, state="readonly")
+    all_tags = set()
+    fields_config = load_json(FIELDS_CONFIG_PATH, 'fields_config')
+    for field in fields_config:
+        all_tags.add(field['name'])
+    regular_combos = load_json(COMBOBOX_REGULAR_PATH, 'combobox_regular')
+    all_tags.update(combo['name'] for combo in regular_combos)
+    mainkey_combos = load_json(COMBOBOX_MAINKEY_PATH, 'combobox_mainkey')
+    all_tags.update(combo['name'] for combo in mainkey_combos)
+    for combo in mainkey_combos:
+        for main_key_dict in combo['main_keys']:
+            for main_key, subkeys in main_key_dict.items():
+                all_tags.update(subkeys.keys())
+    combination_config = load_combination_config()
+    all_tags.update(combo['name'] for combo in combination_config)
+    tag_combobox1['values'] = sorted(all_tags)
+    tag_combobox1.grid(row=0, column=0, padx=5, pady=5)
+
+    condition_var1 = tk.StringVar()
+    condition_combobox1 = ttk.Combobox(first_column_frame, textvariable=condition_var1, width=20, state="readonly")
+    condition_combobox1['values'] = [
+        "содержит", "начинается с", "заканчивается на", "меньше", "больше", "равно", "True", "False"
+    ]
+    condition_combobox1.grid(row=0, column=1, padx=5, pady=5)
+
+    rule_entry_var1 = tk.StringVar()
+    rule_entry1 = tk.Entry(first_column_frame, textvariable=rule_entry_var1, width=20)
+    rule_entry1.grid(row=0, column=2, padx=5, pady=5)
+
+    condition_combobox1.bind("<<ComboboxSelected>>",
+                             lambda e: toggle_rule_entry_state(condition_combobox1, rule_entry1))
+
+    widgets_3.append((first_column_frame, tag_combobox1, condition_combobox1, rule_entry1))
+
+    def toggle_rule_entry_state(condition_combobox, rule_entry):
+        selected_condition = condition_combobox.get()
+        if selected_condition in ["True", "False"]:
+            rule_entry.config(state="disabled")
+        else:
+            rule_entry.config(state="normal")
+
+    def add_new_3_item_set():
+        base_row = len(widgets_3)
+        new_frame = tk.Frame(main_frame)
+        new_frame.grid(row=2 + base_row, column=0, columnspan=3, padx=5, pady=5, sticky="w")
+
+        new_tag_var = tk.StringVar()
+        new_tag_combobox = ttk.Combobox(new_frame, textvariable=new_tag_var, width=20, state="readonly")
+        new_tag_combobox['values'] = sorted(all_tags)
+        new_tag_combobox.grid(row=0, column=0, padx=5, pady=5)
+
+        new_condition_var = tk.StringVar()
+        new_condition_combobox = ttk.Combobox(new_frame, textvariable=new_condition_var, width=20, state="readonly")
+        new_condition_combobox['values'] = [
+            "содержит", "начинается с", "заканчивается на", "меньше", "больше", "равно", "True", "False"
+        ]
+        new_condition_combobox.grid(row=0, column=1, padx=5, pady=5)
+
+        new_rule_var = tk.StringVar()
+        new_rule_entry = tk.Entry(new_frame, textvariable=new_rule_var, width=20)
+        new_rule_entry.grid(row=0, column=2, padx=5, pady=5)
+
+        new_condition_combobox.bind("<<ComboboxSelected>>",
+                                    lambda e: toggle_rule_entry_state(new_condition_combobox, new_rule_entry))
+
+        widgets_3.append((new_frame, new_tag_combobox, new_condition_combobox, new_rule_entry))
+
+        # Update button positions
+        buttons_frame_3.grid(row=3 + base_row, column=0, columnspan=3, padx=5, pady=5, sticky="w")
+        new_height = max(230, 230 + max(len(widgets_3), len(widgets_4)) * 40)
+        create_rule_window.geometry(f"1070x{new_height}")
+
+    def remove_last_3_item_set():
+        if len(widgets_3) > 1:
+            frame_to_destroy, _, _, _ = widgets_3.pop()
+            frame_to_destroy.destroy()
+            buttons_frame_3.grid(row=2 + len(widgets_3), column=0, columnspan=3, padx=5, pady=5, sticky="w")
+            new_height = max(230, 230 + max(len(widgets_3), len(widgets_4)) * 40)
+            create_rule_window.geometry(f"1070x{new_height}")
+
+    buttons_frame_3 = tk.Frame(main_frame)
+    buttons_frame_3.grid(row=2 + len(widgets_3), column=0, columnspan=3, padx=5, pady=5, sticky="w")
+    ttk.Button(buttons_frame_3, text="Добавить", command=add_new_3_item_set).pack(side="left", padx=(0, 5))
+    ttk.Button(buttons_frame_3, text="Удалить", command=remove_last_3_item_set).pack(side="left")
+
+    ttk.Separator(main_frame, orient='vertical').grid(row=1, column=3, rowspan=100, sticky="ns", padx=10)
+
+    second_column_frame = tk.Frame(main_frame)
+    second_column_frame.grid(row=2, column=4, columnspan=4, padx=5, pady=5, sticky="w")
+
+    tk.Label(main_frame, text="Теги", anchor="center").grid(row=1, column=4, padx=5, pady=5)
+    tk.Label(main_frame, text="Условие", anchor="center").grid(row=1, column=5, padx=5, pady=5)
+    tk.Label(main_frame, text="Правило", anchor="center").grid(row=1, column=6, padx=5, pady=5)
+    tk.Label(main_frame, text="Опция", anchor="center").grid(row=1, column=7, padx=5, pady=5)
+
+    tag_var2 = tk.StringVar()
+    tag_combobox2 = ttk.Combobox(second_column_frame, textvariable=tag_var2, width=20, state="readonly")
+    tag_combobox2['values'] = sorted(all_tags)
+    tag_combobox2.grid(row=0, column=0, padx=5, pady=5)
+
+    condition_var2 = tk.StringVar()
+    condition_combobox2 = ttk.Combobox(second_column_frame, textvariable=condition_var2, width=20, state="readonly")
+    condition_combobox2['values'] = [
+        "очистить", "очистить при не выполнении", "CAPS", "верхняя буква", "нижняя буква", "транслит",
+        "добавить текст в начале", "добавить текст в конце", "добавить дату", "отнять дату", "обрезать"
+    ]
+    condition_combobox2.grid(row=0, column=1, padx=5, pady=5)
+
+    rule_entry_var2 = tk.StringVar()
+    rule_entry2 = tk.Entry(second_column_frame, textvariable=rule_entry_var2, width=20)
+    rule_entry2.grid(row=0, column=2, padx=5, pady=5)
+
+    option_entry_var2 = tk.StringVar()
+    option_entry2 = tk.Entry(second_column_frame, textvariable=option_entry_var2, width=20, state="disabled")
+    option_entry2.grid(row=0, column=3, padx=5, pady=5)
+
+    condition_combobox2.bind("<<ComboboxSelected>>",
+                             lambda e: toggle_behavior_widgets(condition_combobox2, second_column_frame, option_entry2,
+                                                               0, 2, rule_entry_var2))
+
+    widgets_4.append((second_column_frame, tag_combobox2, condition_combobox2, rule_entry2, option_entry2))
+
+    def toggle_behavior_widgets(condition_combobox, rule_frame, option_entry, index, col, rule_var):
+        behavior = condition_combobox.get()
+        frame, tag_cb, cond_cb, old_rule_widget, opt_entry = widgets_4[index]
+        if old_rule_widget:
+            old_rule_widget.destroy()
+        if behavior == "транслит":
+            rule_widget = ttk.Combobox(rule_frame, textvariable=rule_var, width=10, state="readonly")
+            rule_widget['values'] = ["uk", "ru", "pl", "hu", "ro"]
+            rule_widget.current(0)
+            option_entry.config(state="disabled")
+        else:
+            rule_widget = tk.Entry(rule_frame, textvariable=rule_var, width=20)
+            if behavior in ["очистить", "CAPS", "верхняя буква", "нижняя буква", "очистить при не выполнении"]:
+                rule_widget.config(state="disabled")
+                option_entry.config(state="disabled")
+            else:
+                rule_widget.config(state="normal")
+                option_entry.config(state="disabled")
+        rule_widget.grid(row=0, column=col, padx=5, pady=5)
+        widgets_4[index] = (frame, tag_cb, cond_cb, rule_widget, opt_entry)
+
+    def add_new_4_item_set():
+        base_row = len(widgets_4)
+        new_frame = tk.Frame(main_frame)
+        new_frame.grid(row=2 + base_row, column=4, columnspan=4, padx=5, pady=5, sticky="w")
+
+        new_tag_var = tk.StringVar()
+        new_tag_combobox = ttk.Combobox(new_frame, textvariable=new_tag_var, width=20, state="readonly")
+        new_tag_combobox['values'] = sorted(all_tags)
+        new_tag_combobox.grid(row=0, column=0, padx=5, pady=5)
+
+        new_condition_var = tk.StringVar()
+        new_condition_combobox = ttk.Combobox(new_frame, textvariable=new_condition_var, width=20, state="readonly")
+        new_condition_combobox['values'] = [
+            "очистить", "очистить при не выполнении", "CAPS", "верхняя буква", "нижняя буква", "транслит",
+            "добавить текст в начале", "добавить текст в конце", "добавить дату", "отнять дату", "обрезать"
+        ]
+        new_condition_combobox.grid(row=0, column=1, padx=5, pady=5)
+
+        new_option_var = tk.StringVar()
+        new_option_entry = tk.Entry(new_frame, textvariable=new_option_var, width=20, state="disabled")
+        new_option_entry.grid(row=0, column=3, padx=5, pady=5)
+
+        new_rule_var = tk.StringVar()
+        new_rule_entry = tk.Entry(new_frame, textvariable=new_rule_var, width=20)
+        new_rule_entry.grid(row=0, column=2, padx=5, pady=5)
+
+        new_condition_combobox.bind("<<ComboboxSelected>>",
+                                    lambda e: toggle_behavior_widgets(new_condition_combobox, new_frame,
+                                                                      new_option_entry, base_row, 2, new_rule_var))
+
+        widgets_4.append((new_frame, new_tag_combobox, new_condition_combobox, new_rule_entry, new_option_entry))
+
+        buttons_frame_4.grid(row=2 + len(widgets_4), column=4, columnspan=4, padx=5, pady=5, sticky="w")
+        new_height = max(230, 230 + max(len(widgets_3), len(widgets_4)) * 40)
+        create_rule_window.geometry(f"1070x{new_height}")
+
+    def remove_last_4_item_set():
+        if len(widgets_4) > 1:
+            frame_to_destroy, _, _, _, _ = widgets_4.pop()
+            frame_to_destroy.destroy()
+            buttons_frame_4.grid(row=2 + len(widgets_4), column=4, columnspan=4, padx=5, pady=5, sticky="w")
+            new_height = max(230, 230 + max(len(widgets_3), len(widgets_4)) * 40)
+            create_rule_window.geometry(f"1070x{new_height}")
+
+    buttons_frame_4 = tk.Frame(main_frame)
+    buttons_frame_4.grid(row=2 + len(widgets_4), column=4, columnspan=4, padx=5, pady=5, sticky="w")
+    ttk.Button(buttons_frame_4, text="Добавить", command=add_new_4_item_set).pack(side="left", padx=(0, 5))
+    ttk.Button(buttons_frame_4, text="Удалить", command=remove_last_4_item_set).pack(side="left")
+
+    def validate_and_save():
+        rule_name = name_var.get().strip()
+        if not rule_name:
+            messagebox.showwarning("Ошибка", "Имя правила не может быть пустым.")
+            return
+
+        rules_config = load_json(RULES_CONFIG_PATH, 'rules_config')
+        if rules_config is None:
+            rules_config = []
+            save_json(RULES_CONFIG_PATH, rules_config)
+            messagebox.showwarning("Информация", f"Создан новый файл конфигурации: {RULES_CONFIG_PATH}")
+
+        if any(rule['name'] == rule_name for rule in rules_config):
+            messagebox.showwarning("Ошибка", "Имя правила уже существует.")
+            return
+
+        conditions = []
+        for frame, tag_cb, cond_cb, rule_entry in widgets_3:
+            tag = tag_cb.get()
+            condition = cond_cb.get()
+            rule = rule_entry.get() if isinstance(rule_entry, tk.Entry) else ""
+            if tag and condition:
+                if condition not in ["True", "False"] and not rule:
+                    messagebox.showwarning("Ошибка", "Введите правило для условия.")
+                    return
+                if condition in ["меньше", "больше", "равно"]:
+                    try:
+                        float(rule)
+                    except ValueError:
+                        messagebox.showwarning("Ошибка",
+                                               "Для условий 'меньше', 'больше' или 'равно' введите только число.")
+                        return
+                if condition in ["True", "False"] and tag not in checkbox_vars:
+                    messagebox.showwarning("Ошибка",
+                                           f"Тег '{tag}' должен быть чекбоксом для условий 'True' или 'False'.")
+                    return
+                conditions.append({'tag': tag, 'condition': condition, 'rule': rule})
+
+        behaviors = []
+        for frame, tag_cb, cond_cb, rule_entry, opt_entry in widgets_4:
+            tag = tag_cb.get()
+            condition = cond_cb.get()
+            rule = rule_entry.get() if isinstance(rule_entry, tk.Entry) else ""
+            option = opt_entry.get()
+            if tag and condition:
+                if condition not in ["очистить", "CAPS", "верхняя буква", "нижняя буква",
+                                     "очистить при не выполнении"] and not rule:
+                    messagebox.showwarning("Ошибка", "Введите правило для поведения.")
+                    return
+                if condition in ["добавить дату", "отнять дату"] and not rule.isdigit():
+                    messagebox.showwarning("Ошибка",
+                                           "Для 'добавить дату' или 'отнять дату' введите количество дней в виде числа.")
+                    return
+                if condition == "обрезать" and not all(part.isdigit() for part in rule.split(':')):
+                    messagebox.showwarning("Ошибка", "Для 'обрезать' введите диапазон в формате 'start:end' с числами.")
+                    return
+                behaviors.append({'tag': tag, 'condition': condition, 'rule': rule})
+
+        if not conditions and not behaviors:
+            messagebox.showwarning("Ошибка", "Правило должно содержать хотя бы одно условие или поведение.")
+            return
+
+        new_rule = {
+            'name': rule_name,
+            'conditions': conditions,
+            'behaviors': behaviors
+        }
+
+        rules_config.append(new_rule)
+        save_json(RULES_CONFIG_PATH, rules_config)
+        messagebox.showinfo("Успех", f"Правило '{rule_name}' успешно создано.")
+        update_rules_listbox(rules_config, listbox)
+        create_rule_window.destroy()
+
+    button_frame = tk.Frame(create_rule_window)
+    button_frame.pack(pady=20, fill=tk.X)
+    button_frame.columnconfigure(0, weight=1)
+    button_frame.columnconfigure(1, weight=1)
+    tk.Button(button_frame, text="ОК", width=10, command=validate_and_save).grid(row=0, column=0, padx=5)
+    tk.Button(button_frame, text="ОТМЕНА", width=10, command=create_rule_window.destroy).grid(row=0, column=1, padx=5)
 
 
 def open_edit_rule_window(listbox, constructor_window):
-    messagebox.showinfo("Информация", "Редактирование правил в разработке")
+    selected_item = listbox.selection()
+    if not selected_item:
+        messagebox.showwarning("Ошибка", "Выберите правило для редактирования")
+        return
+
+    item_data = listbox.item(selected_item)
+    rule_name = item_data['values'][0]
+
+    rules_config = load_json(RULES_CONFIG_PATH, 'rules_config')
+    rule_to_edit = next((rule for rule in rules_config if rule['name'] == rule_name), None)
+
+    if not rule_to_edit:
+        messagebox.showerror("Ошибка", f"Правило '{rule_name}' не найдено.")
+        return
+
+    edit_rule_window = tk.Toplevel()
+    edit_rule_window.title(f"Изменить правило: {rule_name}")
+    edit_rule_window.geometry("1070x230")
+    edit_rule_window.resizable(False, False)
+    edit_rule_window.focus_set()
+    edit_rule_window.grab_set()
+
+    # Store StringVars to prevent garbage collection
+    edit_rule_window._vars_to_keep = []
+
+    main_frame = tk.Frame(edit_rule_window)
+    main_frame.pack(padx=10, pady=5, fill=tk.BOTH, expand=True)
+
+    widgets_3 = []
+    widgets_4 = []
+
+    tk.Label(main_frame, text="Имя правила:").grid(row=0, column=0, padx=5, pady=5, sticky="w")
+    name_var = tk.StringVar(value=rule_name)
+    tk.Entry(main_frame, textvariable=name_var, width=30).grid(row=0, column=1, columnspan=5, padx=5, pady=5,
+                                                               sticky="w")
+
+    first_column_frame = tk.Frame(main_frame)
+    first_column_frame.grid(row=2, column=0, columnspan=3, padx=5, pady=5, sticky="w")
+
+    tk.Label(main_frame, text="Теги", anchor="center").grid(row=1, column=0, padx=5, pady=5)
+    tk.Label(main_frame, text="Условие", anchor="center").grid(row=1, column=1, padx=5, pady=5)
+    tk.Label(main_frame, text="Правило", anchor="center").grid(row=1, column=2, padx=5, pady=5)
+
+    all_tags = set()
+    fields_config = load_json(FIELDS_CONFIG_PATH, 'fields_config')
+    for field in fields_config:
+        all_tags.add(field['name'])
+    regular_combos = load_json(COMBOBOX_REGULAR_PATH, 'combobox_regular')
+    all_tags.update(combo['name'] for combo in regular_combos)
+    mainkey_combos = load_json(COMBOBOX_MAINKEY_PATH, 'combobox_mainkey')
+    all_tags.update(combo['name'] for combo in mainkey_combos)
+    for combo in mainkey_combos:
+        for main_key_dict in combo['main_keys']:
+            for main_key, subkeys in main_key_dict.items():
+                all_tags.update(subkeys.keys())
+    combination_config = load_combination_config()
+    all_tags.update(combo['name'] for combo in combination_config)
+    sorted_tags = sorted(all_tags)
+
+    buttons_frame_3 = tk.Frame(main_frame)
+    buttons_frame_4 = tk.Frame(main_frame)
+
+    def toggle_rule_entry_state(condition_combobox, rule_entry):
+        selected_condition = condition_combobox.get()
+        if selected_condition in ["True", "False"]:
+            rule_entry.config(state="disabled")
+        else:
+            rule_entry.config(state="normal")
+
+    def add_new_3_item_set(pre_populated_data=None):
+        base_row = len(widgets_3)
+        new_frame = tk.Frame(main_frame)
+        new_frame.grid(row=2 + base_row, column=0, columnspan=3, padx=5, pady=5, sticky="w")
+
+        new_tag_var = tk.StringVar()
+        new_tag_combobox = ttk.Combobox(new_frame, textvariable=new_tag_var, width=20, state="readonly")
+        new_tag_combobox['values'] = sorted_tags
+        new_tag_combobox.grid(row=0, column=0, padx=5, pady=5)
+
+        new_condition_var = tk.StringVar()
+        new_condition_combobox = ttk.Combobox(new_frame, textvariable=new_condition_var, width=20, state="readonly")
+        new_condition_combobox['values'] = [
+            "содержит", "начинается с", "заканчивается на", "меньше", "больше", "равно", "True", "False"
+        ]
+        new_condition_combobox.grid(row=0, column=1, padx=5, pady=5)
+
+        new_rule_var = tk.StringVar()
+        new_rule_entry = tk.Entry(new_frame, textvariable=new_rule_var, width=20)
+        new_rule_entry.grid(row=0, column=2, padx=5, pady=5)
+
+        widgets_3.append((new_frame, new_tag_combobox, new_condition_combobox, new_rule_entry))
+        edit_rule_window._vars_to_keep.extend([new_tag_var, new_condition_var, new_rule_var])
+
+        new_condition_combobox.bind("<<ComboboxSelected>>",
+                                    lambda e: toggle_rule_entry_state(new_condition_combobox, new_rule_entry))
+
+        if pre_populated_data:
+            new_tag_var.set(pre_populated_data.get('tag', ''))
+            new_condition_var.set(pre_populated_data.get('condition', ''))
+            new_rule_var.set(pre_populated_data.get('rule', ''))
+            toggle_rule_entry_state(new_condition_combobox, new_rule_entry)
+
+        buttons_frame_3.grid(row=2 + len(widgets_3), column=0, columnspan=3, padx=5, pady=5, sticky="w")
+        new_height = max(230, 230 + max(len(widgets_3), len(widgets_4)) * 40)
+        edit_rule_window.geometry(f"1070x{new_height}")
+
+    def remove_last_3_item_set():
+        if len(widgets_3) > 1:
+            frame_to_destroy, _, _, _ = widgets_3.pop()
+            frame_to_destroy.destroy()
+            buttons_frame_3.grid(row=2 + len(widgets_3), column=0, columnspan=3, padx=5, pady=5, sticky="w")
+            new_height = max(230, 230 + max(len(widgets_3), len(widgets_4)) * 40)
+            edit_rule_window.geometry(f"1070x{new_height}")
+
+    if rule_to_edit.get('conditions'):
+        for condition in rule_to_edit.get('conditions'):
+            add_new_3_item_set(condition)
+    else:
+        add_new_3_item_set()
+
+    buttons_frame_3.grid(row=2 + len(widgets_3), column=0, columnspan=3, padx=5, pady=5, sticky="w")
+    ttk.Button(buttons_frame_3, text="Добавить", command=add_new_3_item_set).pack(side="left", padx=(0, 5))
+    ttk.Button(buttons_frame_3, text="Удалить", command=remove_last_3_item_set).pack(side="left")
+
+    ttk.Separator(main_frame, orient='vertical').grid(row=1, column=3, rowspan=100, sticky="ns", padx=10)
+
+    second_column_frame = tk.Frame(main_frame)
+    second_column_frame.grid(row=2, column=4, columnspan=4, padx=5, pady=5, sticky="w")
+
+    tk.Label(main_frame, text="Теги", anchor="center").grid(row=1, column=4, padx=5, pady=5)
+    tk.Label(main_frame, text="Условие", anchor="center").grid(row=1, column=5, padx=5, pady=5)
+    tk.Label(main_frame, text="Правило", anchor="center").grid(row=1, column=6, padx=5, pady=5)
+    tk.Label(main_frame, text="Опция", anchor="center").grid(row=1, column=7, padx=5, pady=5)
+
+    def toggle_behavior_widgets(condition_combobox, rule_frame, option_entry, index, col, rule_var):
+        behavior = condition_combobox.get()
+        frame, tag_cb, cond_cb, old_rule_widget, opt_entry = widgets_4[index]
+        if old_rule_widget:
+            old_rule_widget.destroy()
+        if behavior == "транслит":
+            rule_widget = ttk.Combobox(rule_frame, textvariable=rule_var, width=10, state="readonly")
+            rule_widget['values'] = ["uk", "ru", "pl", "hu", "ro"]
+            rule_widget.current(0)
+            option_entry.config(state="disabled")
+        else:
+            rule_widget = tk.Entry(rule_frame, textvariable=rule_var, width=20)
+            if behavior in ["очистить", "CAPS", "верхняя буква", "нижняя буква", "очистить при не выполнении"]:
+                rule_widget.config(state="disabled")
+                option_entry.config(state="disabled")
+            else:
+                rule_widget.config(state="normal")
+                option_entry.config(state="disabled")
+        rule_widget.grid(row=0, column=col, padx=5, pady=5)
+        widgets_4[index] = (frame, tag_cb, cond_cb, rule_widget, opt_entry)
+
+    def add_new_4_item_set(pre_populated_data=None):
+        base_row = len(widgets_4)
+        new_frame = tk.Frame(main_frame)
+        new_frame.grid(row=2 + base_row, column=4, columnspan=4, padx=5, pady=5, sticky="w")
+
+        new_tag_var = tk.StringVar()
+        new_tag_combobox = ttk.Combobox(new_frame, textvariable=new_tag_var, width=20, state="readonly")
+        new_tag_combobox['values'] = sorted_tags
+        new_tag_combobox.grid(row=0, column=0, padx=5, pady=5)
+
+        new_condition_var = tk.StringVar()
+        new_condition_combobox = ttk.Combobox(new_frame, textvariable=new_condition_var, width=20, state="readonly")
+        new_condition_combobox['values'] = [
+            "очистить", "очистить при не выполнении", "CAPS", "верхняя буква", "нижняя буква", "транслит",
+            "добавить текст в начале", "добавить текст в конце", "добавить дату", "отнять дату", "обрезать"
+        ]
+        new_condition_combobox.grid(row=0, column=1, padx=5, pady=5)
+
+        new_option_var = tk.StringVar()
+        new_option_entry = tk.Entry(new_frame, textvariable=new_option_var, width=20, state="disabled")
+        new_option_entry.grid(row=0, column=3, padx=5, pady=5)
+
+        new_rule_var = tk.StringVar()
+        new_rule_entry = tk.Entry(new_frame, textvariable=new_rule_var, width=20)
+        new_rule_entry.grid(row=0, column=2, padx=5, pady=5)
+
+        widgets_4.append((new_frame, new_tag_combobox, new_condition_combobox, new_rule_entry, new_option_entry))
+        edit_rule_window._vars_to_keep.extend([new_tag_var, new_condition_var, new_rule_var, new_option_var])
+
+        new_condition_combobox.bind("<<ComboboxSelected>>",
+                                    lambda e: toggle_behavior_widgets(new_condition_combobox, new_frame,
+                                                                      new_option_entry, base_row, 2, new_rule_var))
+
+        if pre_populated_data:
+            new_tag_var.set(pre_populated_data.get('tag', ''))
+            new_condition_var.set(pre_populated_data.get('condition', ''))
+            new_rule_var.set(pre_populated_data.get('rule', ''))
+            new_option_var.set(pre_populated_data.get('option', ''))
+            toggle_behavior_widgets(new_condition_combobox, new_frame, new_option_entry, base_row, 2, new_rule_var)
+
+        buttons_frame_4.grid(row=2 + len(widgets_4), column=4, columnspan=4, padx=5, pady=5, sticky="w")
+        new_height = max(230, 230 + max(len(widgets_3), len(widgets_4)) * 40)
+        edit_rule_window.geometry(f"1070x{new_height}")
+
+    def remove_last_4_item_set():
+        if len(widgets_4) > 1:
+            frame_to_destroy, _, _, _, _ = widgets_4.pop()
+            frame_to_destroy.destroy()
+            buttons_frame_4.grid(row=2 + len(widgets_4), column=4, columnspan=4, padx=5, pady=5, sticky="w")
+            new_height = max(230, 230 + max(len(widgets_3), len(widgets_4)) * 40)
+            edit_rule_window.geometry(f"1070x{new_height}")
+
+    if rule_to_edit.get('behaviors'):
+        for behavior in rule_to_edit.get('behaviors'):
+            add_new_4_item_set(behavior)
+    else:
+        add_new_4_item_set()
+
+    buttons_frame_4.grid(row=2 + len(widgets_4), column=4, columnspan=4, padx=5, pady=5, sticky="w")
+    ttk.Button(buttons_frame_4, text="Добавить", command=add_new_4_item_set).pack(side="left", padx=(0, 5))
+    ttk.Button(buttons_frame_4, text="Удалить", command=remove_last_4_item_set).pack(side="left")
+
+    def validate_and_save_edit():
+        new_rule_name = name_var.get().strip()
+        if not new_rule_name:
+            messagebox.showwarning("Ошибка", "Имя правила не может быть пустым.")
+            return
+
+        rules_config = load_json(RULES_CONFIG_PATH, 'rules_config')
+        if rules_config is None: rules_config = []
+
+        # Check for name duplication, excluding the current rule being edited
+        if new_rule_name != rule_name and any(rule['name'] == new_rule_name for rule in rules_config):
+            messagebox.showwarning("Ошибка", "Имя правила уже существует.")
+            return
+
+        conditions = []
+        for frame, tag_cb, cond_cb, rule_entry in widgets_3:
+            tag = tag_cb.get()
+            condition = cond_cb.get()
+            rule = rule_entry.get()
+            if tag and condition:
+                if condition not in ["True", "False"] and not rule:
+                    messagebox.showwarning("Ошибка", "Введите правило для условия.")
+                    return
+                if condition in ["меньше", "больше", "равно"]:
+                    try:
+                        float(rule)
+                    except ValueError:
+                        messagebox.showwarning("Ошибка",
+                                               "Для условий 'меньше', 'больше' или 'равно' введите только число.")
+                        return
+                conditions.append({'tag': tag, 'condition': condition, 'rule': rule})
+
+        behaviors = []
+        for frame, tag_cb, cond_cb, rule_entry, opt_entry in widgets_4:
+            tag = tag_cb.get()
+            condition = cond_cb.get()
+            rule = rule_entry.get()
+            option = opt_entry.get()
+            if tag and condition:
+                if condition not in ["очистить", "CAPS", "верхняя буква", "нижняя буква",
+                                     "очистить при не выполнении"] and not rule:
+                    messagebox.showwarning("Ошибка", "Введите правило для поведения.")
+                    return
+                if condition in ["добавить дату", "отнять дату"] and not rule.isdigit():
+                    messagebox.showwarning("Ошибка",
+                                           "Для 'добавить дату' или 'отнять дату' введите количество дней в виде числа.")
+                    return
+                if condition == "обрезать" and not all(part.isdigit() for part in rule.split(':')):
+                    messagebox.showwarning("Ошибка", "Для 'обрезать' введите диапазон в формате 'start:end' с числами.")
+                    return
+                behaviors.append({'tag': tag, 'condition': condition, 'rule': rule})
+
+        updated_rules = [rule for rule in rules_config if rule['name'] != rule_name]
+        updated_rules.append({
+            'name': new_rule_name,
+            'conditions': conditions,
+            'behaviors': behaviors
+        })
+
+        save_json(RULES_CONFIG_PATH, {'rules_config': updated_rules})
+        messagebox.showinfo("Успех", f"Правило '{new_rule_name}' успешно обновлено.")
+        update_rules_listbox(updated_rules, listbox)
+        edit_rule_window.destroy()
+
+    button_frame = tk.Frame(edit_rule_window)
+    button_frame.pack(pady=20, fill=tk.X)
+    button_frame.columnconfigure(0, weight=1)
+    button_frame.columnconfigure(1, weight=1)
+    tk.Button(button_frame, text="ОК", width=10, command=validate_and_save_edit).grid(row=0, column=0, padx=5)
+    tk.Button(button_frame, text="ОТМЕНА", width=10, command=edit_rule_window.destroy).grid(row=0, column=1, padx=5)
 
 
-def delete_rule(listbox):
-    messagebox.showinfo("Информация", "Удаление правил в разработке")
+def delete_rule(listbox, rules_file=RULES_CONFIG_PATH): # Use the global path
+    selected_item = listbox.selection()
+    if not selected_item:
+        messagebox.showwarning("Ошибка", "Выберите правило для удаления")
+        return
+
+    item = listbox.item(selected_item)
+    values = item["values"]
+    if not values:
+        messagebox.showwarning("Ошибка", "Данные выбранного правила недоступны")
+        return
+
+    rule_name = values[0]
+    response = messagebox.askyesno("Подтверждение", f"Вы уверены, что хотите удалить правило '{rule_name}'?")
+    if not response:
+        return
+
+    # Load existing rules
+    existing_rules = load_json(rules_file, 'rules_config')
+    if not existing_rules:
+        messagebox.showwarning("Ошибка", "Не удалось загрузить конфигурацию правил")
+        return
+
+    # Remove the selected rule
+    updated_rules = [rule for rule in existing_rules if rule['name'] != rule_name]
+    if len(updated_rules) == len(existing_rules):
+        messagebox.showwarning("Ошибка", f"Правило '{rule_name}' не найдено в конфигурации")
+        return
+
+    # Save updated rules to JSON
+    try:
+        save_json(rules_file, updated_rules)
+    except Exception as e:
+        messagebox.showerror("Ошибка", f"Не удалось сохранить изменения: {str(e)}")
+        return
+
+    # Update the listbox
+    update_rules_listbox(updated_rules, listbox)
+    print(f"Deleted rule: {rule_name}")
 
 
 # --- Main Application Window Setup ---
