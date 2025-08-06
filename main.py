@@ -188,18 +188,15 @@ def get_common_merge_data():
         merge_data.update(data_dict)
 
     # Include combined tags
-    combination_config = load_json(COMBINATION_CONFIG_PATH, 'combination_config')
+    combination_config = load_combination_config()  # Make sure this function exists
     for combo in combination_config:
         combined_value = ""
         for tag in combo['tags']:
-            # Replace placeholder tags with their actual values
-            if tag == ' ':
-                combined_value += ' '
-            elif tag == '\n':
-                combined_value += '\n'
+            # All tags, including 'today_tag', can now be looked up directly
+            if tag == 'today_tag':
+                combined_value += datetime.now().strftime("%d.%m.%Y")
             else:
-                # Use str() to handle various data types gracefully
-                combined_value += str(merge_data.get(tag, tag))  # Use tag itself as literal if not found
+                combined_value += merge_data.get(tag, tag)
         merge_data[combo['name']] = combined_value
 
     return merge_data
@@ -475,8 +472,14 @@ def open_constructor_window():
                           load_json(COMBOBOX_REGULAR_PATH, 'combobox_regular')])
         all_items.extend([(c['name'], c['type'], c.get('tag_type', 'список')) for c in
                           load_json(COMBOBOX_MAINKEY_PATH, 'combobox_mainkey')])
-        all_items.extend([(c['name'], c['type'], c.get('tag_type', 'сочетание')) for c in
-                          load_json(COMBINATION_CONFIG_PATH, 'combination_config')])
+
+        # This is the new part for combinations
+        try:
+            combination_config = load_combination_config()
+            for combo in combination_config:
+                all_items.append((combo['name'], combo['type'], combo.get('tag_type', 'сочетание')))
+        except Exception as e:
+            messagebox.showerror("Ошибка", f"Ошибка при загрузке combination_config: {str(e)}")
 
         all_items.sort(key=lambda x: x[0])
         for item in all_items:
@@ -577,27 +580,26 @@ def open_field_window(listbox, item_to_edit):
         tk.Radiobutton(type_frame, text=text, value=value, variable=type_var).pack(side=LEFT, padx=5)
 
     def refresh_main_and_constructor():
-        # Refresh main UI widgets
-        for widget in dynamic_frame.winfo_children():
-            widget.destroy()
-        load_all_dynamic_widgets()
+        """Refreshes the dynamic widgets in the main window and the tags in the constructor window."""
+        global dynamic_frame
+        if dynamic_frame and dynamic_frame.winfo_exists():
+            for widget in dynamic_frame.winfo_children():
+                widget.destroy()
+            load_all_dynamic_widgets()
 
-        # Refresh constructor listbox
-        # This is a bit of a hacky way to find the constructor window and listbox to refresh it
-        for w in window.winfo_children():
-            if isinstance(w, tk.Toplevel) and w.title() == "Конструктор":
-                for child in w.winfo_children():
-                    if isinstance(child, ttk.Notebook):
-                        # Assuming tags listbox is in the first tab
-                        tab_frame = child.winfo_children()[0]
-                        # Find the listbox
-                        for grandchild in tab_frame.winfo_children():
-                            if isinstance(grandchild, tk.Frame):
-                                for great_grandchild in grandchild.winfo_children():
-                                    if isinstance(great_grandchild, ttk.Treeview):
-                                        # Repopulate it
-                                        populate_tags_listbox_in_constructor(great_grandchild)
-                                        return
+        # Refresh constructor listbox if it's open
+        # We now look for the `constructor_window` object directly, not by title
+        global constructor_window
+        if 'constructor_window' in globals() and constructor_window.winfo_exists():
+            for child in constructor_window.winfo_children():
+                if isinstance(child, ttk.Notebook):
+                    tags_tab = child.winfo_children()[0]
+                    for grand_child in tags_tab.winfo_children():
+                        if isinstance(grand_child, tk.Frame):
+                            for great_grand_child in grand_child.winfo_children():
+                                if isinstance(great_grand_child, ttk.Treeview):
+                                    populate_tags_listbox_in_constructor(great_grand_child)
+                                    return
 
     def save_field():
         name = name_var.get().strip()
@@ -958,11 +960,199 @@ def open_list_window(listbox, item_to_edit):
     refresh_table()
 
 
+# --- Combination Window Functions ---
 def open_combination_window(listbox):
-    messagebox.showinfo("Информация", "Функционал для 'Сочетание' в разработке.")
+    """Window to create or edit a 'Combination' tag."""
+    print("DEBUG: Starting open_combination_window function.")
+    combo_window = tk.Toplevel(window)
+    combo_window.title("Создание сочетания")
+    combo_window.geometry("550x700")
+    combo_window.resizable(False, False)
+    combo_window.focus_set()
+    combo_window.grab_set()
+
+    name_var = tk.StringVar()
+    combination_tags = []
+
+    print("DEBUG: Loading tags from config files.")
+    # Load all available tags (fields, comboboxes, etc.)
+    all_tags = set()
+    for config_path in [FIELDS_CONFIG_PATH, COMBOBOX_REGULAR_PATH, COMBOBOX_MAINKEY_PATH]:
+        cfg = load_json(config_path, '')
+        all_tags.update([item['name'] for item in cfg])
+    sorted_tags = sorted(list(all_tags))
+    print(f"DEBUG: Found {len(sorted_tags)} tags.")
+
+    def refresh_listbox():
+        """Refreshes the listbox with the current combination elements."""
+        for item in combo_listbox.get_children():
+            combo_listbox.delete(item)
+        for i, tag in enumerate(combination_tags):
+            display_tag = tag
+            if tag == ' ':
+                display_tag = "[Пробел]"
+            elif tag == '\n':
+                display_tag = "[Абзац]"
+            elif tag == 'today_tag':
+                display_tag = "[СЕГОДНЯ]"
+            combo_listbox.insert("", "end", values=(i + 1, display_tag))
+
+    def add_element(element):
+        if element:
+            if element == "[Пробел]":
+                element = ' '
+            elif element == "[Абзац]":
+                element = '\n'
+            elif element == "[СЕГОДНЯ]":
+                element = 'today_tag'
+
+            combination_tags.append(element)
+            refresh_listbox()
+
+    def remove_element():
+        selected_item = combo_listbox.selection()
+        if selected_item:
+            index_to_remove = int(combo_listbox.item(selected_item[0])['values'][0]) - 1
+            if 0 <= index_to_remove < len(combination_tags):
+                del combination_tags[index_to_remove]
+                refresh_listbox()
+
+    def move_element(direction):
+        selected_item = combo_listbox.selection()
+        if not selected_item:
+            return
+        index = int(combo_listbox.item(selected_item[0])['values'][0]) - 1
+        if direction == 'up' and index > 0:
+            combination_tags[index], combination_tags[index - 1] = combination_tags[index - 1], combination_tags[index]
+        elif direction == 'down' and index < len(combination_tags) - 1:
+            combination_tags[index], combination_tags[index + 1] = combination_tags[index + 1], combination_tags[index]
+        refresh_listbox()
+        combo_listbox.selection_set(combo_listbox.get_children()[index + (1 if direction == 'down' else -1)])
+
+    def save_combination():
+        name = name_var.get().strip()
+        if not name:
+            messagebox.showwarning("Ошибка", "Введите имя для сочетания.", parent=combo_window)
+            return
+        if not combination_tags:
+            messagebox.showwarning("Ошибка", "Добавьте хотя бы один элемент в сочетание.", parent=combo_window)
+            return
+
+        all_configs = (load_json(path, '') for path in
+                       [FIELDS_CONFIG_PATH, COMBOBOX_REGULAR_PATH, COMBOBOX_MAINKEY_PATH, COMBINATION_CONFIG_PATH])
+        all_names = {item['name'] for config in all_configs for item in config}
+        if name in all_names:
+            messagebox.showwarning("Ошибка", f"Имя '{name}' уже используется.", parent=combo_window)
+            return
+
+        combo_data = {"name": name, "type": "текст", "tag_type": "сочетание", "tags": combination_tags}
+        combo_config = load_json(COMBINATION_CONFIG_PATH, 'combination_config')
+        combo_config.append(combo_data)
+        save_json(COMBINATION_CONFIG_PATH, combo_config)
+        refresh_main_and_constructor()
+        combo_window.destroy()
+
+    print("DEBUG: Starting UI layout creation.")
+
+    # New layout: A main content frame and a separate button frame at the bottom.
+    content_frame = tk.Frame(combo_window, padx=10, pady=10)
+    content_frame.pack(fill="both", expand=True)
+
+    button_frame = tk.Frame(combo_window)
+    button_frame.pack(side="bottom", pady=10)
+    tk.Button(button_frame, text="ОК", width=10, command=save_combination).pack(side="left", padx=5)
+    tk.Button(button_frame, text="Отмена", width=10, command=combo_window.destroy).pack(side="left", padx=5)
+
+    tk.Label(content_frame, text="Имя сочетания:").pack(anchor="w")
+    name_entry = tk.Entry(content_frame, textvariable=name_var, width=50)
+    name_entry.pack(pady=(0, 10), fill="x")
+
+    options_frame = tk.Frame(content_frame)
+    options_frame.pack(fill="x")
+
+    # Left side for tags
+    tag_options_frame = tk.Frame(options_frame)
+    tag_options_frame.pack(side="left", padx=(0, 10))
+    tk.Label(tag_options_frame, text="Добавить тег:").pack(anchor="w")
+    tag_combo = ttk.Combobox(tag_options_frame, values=sorted_tags, state="readonly")
+    tag_combo.pack(side="left", fill="x", expand=True, padx=(0, 5))
+    tk.Button(tag_options_frame, text="Добавить", command=lambda: add_element(tag_combo.get())).pack(side="left")
+
+    # Right side for literals
+    literal_options_frame = tk.Frame(options_frame)
+    literal_options_frame.pack(side="left")
+    tk.Label(literal_options_frame, text="Добавить текст:").pack(anchor="w")
+    literal_entry = tk.Entry(literal_options_frame, width=20)
+    literal_entry.pack(side="left", fill="x", expand=True, padx=(0, 5))
+    tk.Button(literal_options_frame, text="Добавить", command=lambda: add_element(literal_entry.get())).pack(
+        side="left")
+
+    # Literal buttons
+    literal_buttons_frame = tk.Frame(content_frame, pady=5)
+    literal_buttons_frame.pack(fill="x")
+    tk.Button(literal_buttons_frame, text="Пробел", command=lambda: add_element(' ')).pack(side="left", padx=2)
+    tk.Button(literal_buttons_frame, text="Абзац", command=lambda: add_element('\n')).pack(side="left", padx=2)
+    tk.Button(literal_buttons_frame, text="СЕГОДНЯ", command=lambda: add_element('today_tag')).pack(side="left", padx=2)
+
+    tk.Label(content_frame, text="Элементы сочетания:").pack(anchor="w", pady=(10, 0))
+
+    combo_listbox_frame = tk.Frame(content_frame)
+    combo_listbox_frame.pack(fill="both", expand=True, pady=(0, 10))
+
+    combo_listbox = ttk.Treeview(combo_listbox_frame, columns=("№", "Элемент"), show="headings", height=10)
+    combo_listbox.heading("№", text="№", anchor="center")
+    combo_listbox.heading("Элемент", text="Элемент")
+    combo_listbox.column("№", width=30, anchor="center")
+    combo_listbox.column("Элемент", width=400, anchor="w")
+
+    listbox_scrollbar = ttk.Scrollbar(combo_listbox_frame, orient="vertical", command=combo_listbox.yview)
+    combo_listbox.configure(yscrollcommand=listbox_scrollbar.set)
+    combo_listbox.pack(side="left", fill="both", expand=True)
+    listbox_scrollbar.pack(side="right", fill="y")
+
+    actions_frame = tk.Frame(content_frame)
+    actions_frame.pack(fill="x", pady=5)
+    tk.Button(actions_frame, text="Удалить", width=12, command=remove_element).pack(side="left", padx=2)
+    tk.Button(actions_frame, text="Вверх", width=12, command=lambda: move_element('up')).pack(side="left", padx=2)
+    tk.Button(actions_frame, text="Вниз", width=12, command=lambda: move_element('down')).pack(side="left", padx=2)
+
+    refresh_listbox()
+    print("DEBUG: Finished UI layout creation. Buttons should be visible now.")
 
 
-# --- REPLACE THE OLD open_edit_tag_window FUNCTION WITH THIS ---
+def load_combination_config():
+    """Load combination config from JSON file, initializing if not found."""
+    try:
+        with open(COMBINATION_CONFIG_PATH, encoding='utf8') as f:
+            return json.load(f)
+    except FileNotFoundError:
+        with open(COMBINATION_CONFIG_PATH, 'w', encoding='utf8') as f:
+            json.dump([], f, ensure_ascii=False, indent=4)
+        messagebox.showwarning("Информация", f"Создан новый файл конфигурации: {COMBINATION_CONFIG_PATH}")
+        return []
+    except json.JSONDecodeError:
+        messagebox.showwarning("Предупреждение",
+                               f"Файл {COMBINATION_CONFIG_PATH} поврежден. Инициализация пустой конфигурации.")
+        with open(COMBINATION_CONFIG_PATH, 'w', encoding='utf8') as f:
+            json.dump([], f, ensure_ascii=False, indent=4)
+        return []
+
+def load_combination_config():
+    """Load combination config from JSON file, initializing if not found."""
+    try:
+        with open(COMBINATION_CONFIG_PATH, encoding='utf8') as f:
+            return json.load(f)
+    except FileNotFoundError:
+        with open(COMBINATION_CONFIG_PATH, 'w', encoding='utf8') as f:
+            json.dump([], f, ensure_ascii=False, indent=4)
+        messagebox.showwarning("Информация", f"Создан новый файл конфигурации: {COMBINATION_CONFIG_PATH}")
+        return []
+    except json.JSONDecodeError:
+        messagebox.showwarning("Предупреждение", f"Файл {COMBINATION_CONFIG_PATH} поврежден. Инициализация пустой конфигурации.")
+        with open(COMBINATION_CONFIG_PATH, 'w', encoding='utf8') as f:
+            json.dump([], f, ensure_ascii=False, indent=4)
+        return []
+
 
 def open_edit_tag_window(listbox):
     """Determines which editor to open based on the selected tag type."""
