@@ -1,0 +1,1 @@
+pyinstaller -w --additional-hooks-dir=D:\document_filler\tkentrycomplete.py main.py

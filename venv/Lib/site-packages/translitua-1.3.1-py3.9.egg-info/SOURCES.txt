@@ -1,0 +1,9 @@
+README.rst
+setup.cfg
+setup.py
+translitua/__init__.py
+translitua/translit.py
+translitua.egg-info/PKG-INFO
+translitua.egg-info/SOURCES.txt
+translitua.egg-info/dependency_links.txt
+translitua.egg-info/top_level.txt
