@@ -536,11 +536,11 @@ def open_constructor_window():
     tags_listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
     scrollbar_tags.pack(side=tk.RIGHT, fill=tk.Y)
 
-    tk.Button(tags_buttons_frame, text="Новый", width=14, command=lambda: open_new_tag_window(tags_listbox)).pack(
+    tk.Button(tags_buttons_frame, text="Новый", width=14, command=lambda: open_new_tag_window(tags_listbox, constructor_window)).pack(
         side=TOP, pady=2)
     tk.Button(tags_buttons_frame, text="Редактировать", width=14,
               command=lambda: open_edit_tag_window(tags_listbox)).pack(side=TOP, pady=2)
-    tk.Button(tags_buttons_frame, text="Удалить", width=14, command=lambda: delete_tag(tags_listbox)).pack(side=TOP,
+    tk.Button(tags_buttons_frame, text="Удалить", width=14, command=lambda: delete_tag(tags_listbox, constructor_window)).pack(side=TOP,
                                                                                                            pady=2)
     populate_tags_listbox(tags_listbox)
 
@@ -569,7 +569,7 @@ def open_constructor_window():
               command=lambda: open_create_rule_window(rules_listbox, constructor_window)).pack(side=TOP, pady=2)
     tk.Button(rules_buttons_frame, text="Изменить", width=14,
               command=lambda: open_edit_rule_window(rules_listbox, constructor_window)).pack(side=TOP, pady=2)
-    tk.Button(rules_buttons_frame, text="Удалить", width=14, command=lambda: delete_rule(rules_listbox)).pack(side=TOP,
+    tk.Button(rules_buttons_frame, text="Удалить", width=14, command=lambda: delete_rule(rules_listbox, constructor_window)).pack(side=TOP,
                                                                                                               pady=2)
 
     rules = load_json(RULES_CONFIG_PATH, 'rules_config')
@@ -580,9 +580,9 @@ def open_constructor_window():
 # For brevity, I will add the main ones back. The complex ones like rules will need to be added from original.
 # The following implementations are from the original file, adapted for the new structure.
 
-def open_new_tag_window(listbox):
+def open_new_tag_window(listbox, parent_window):
     """Window to choose what kind of new tag to create."""
-    new_window = tk.Toplevel(window)
+    new_window = tk.Toplevel(parent_window)
     new_window.title("Новый тег")
     new_window.geometry("200x250")
     new_window.resizable(False, False)
@@ -594,20 +594,20 @@ def open_new_tag_window(listbox):
 
     # The listbox needs to be passed to refresh it upon creation
     tk.Button(btn_frame, text="ПОЛЕ", width=15, height=2,
-              command=lambda: [new_window.destroy(), open_field_window(listbox, None)]).pack(pady=5)
+              command=lambda: [new_window.destroy(), open_field_window(listbox, None, parent_window)]).pack(pady=5)
     tk.Button(btn_frame, text="СПИСОК", width=15, height=2,
-              command=lambda: [new_window.destroy(), open_list_window(listbox, None)]).pack(pady=5)
+              command=lambda: [new_window.destroy(), open_list_window(listbox, None, parent_window)]).pack(pady=5)
     tk.Button(btn_frame, text="ЧЕКБОКС", width=15, height=2,
-              command=lambda: [new_window.destroy(), open_checkbox_window(listbox, None)]).pack(pady=5)
-    tk.Button(btn_frame, text="СОЧЕТАНИЕ", width=15, height=2, command=lambda: [new_window.destroy(), open_combination_window(listbox, None)]).pack(pady=5)
+              command=lambda: [new_window.destroy(), open_checkbox_window(listbox, None, parent_window)]).pack(pady=5)
+    tk.Button(btn_frame, text="СОЧЕТАНИЕ", width=15, height=2, command=lambda: [new_window.destroy(), open_combination_window(listbox, None, parent_window)]).pack(pady=5)
 
 
-def open_field_window(listbox, item_to_edit):
+def open_field_window(listbox, item_to_edit, parent_window):
     """Window to create or edit a simple 'Field' (Entry widget)."""
     is_edit = item_to_edit is not None
     title = "Редактировать поле" if is_edit else "Создание поля"
 
-    field_window = tk.Toplevel(window)
+    field_window = tk.Toplevel(parent_window)
     field_window.title(title)
     field_window.geometry("300x180")
     field_window.resizable(False, False)
@@ -670,12 +670,12 @@ def open_field_window(listbox, item_to_edit):
     tk.Button(btn_frame, text="ОТМЕНА", width=10, command=field_window.destroy).pack(side=LEFT, padx=5)
 
 
-def open_checkbox_window(listbox, item_to_edit):
+def open_checkbox_window(listbox, item_to_edit, parent_window):
     """Window to create or edit a 'Checkbox'."""
     is_edit = item_to_edit is not None
     title = "Редактировать чекбокс" if is_edit else "Создание чекбокса"
 
-    cb_window = tk.Toplevel(window)
+    cb_window = tk.Toplevel(parent_window)
     cb_window.title(title)
     cb_window.geometry("300x120")
     cb_window.resizable(False, False)
@@ -729,7 +729,7 @@ def open_checkbox_window(listbox, item_to_edit):
 
 # --- REPLACE THE OLD open_list_window FUNCTION WITH THIS ---
 
-def open_list_window(listbox, item_to_edit):
+def open_list_window(listbox, item_to_edit, parent_window):
     """
     Full implementation for CREATING and EDITING lists.
     Handles both simple and main-key lists, and hides the import button in edit mode.
@@ -737,7 +737,7 @@ def open_list_window(listbox, item_to_edit):
     is_edit = item_to_edit is not None
     title = "Редактировать список" if is_edit else "Создание списка"
 
-    list_window = tk.Toplevel(window)
+    list_window = tk.Toplevel(parent_window)
     list_window.title(title)
     list_window.resizable(False, False)
     list_window.focus_set()
@@ -977,7 +977,7 @@ def open_list_window(listbox, item_to_edit):
 
 
 # --- Combination Window Functions ---
-def open_combination_window(listbox, item_to_edit):
+def open_combination_window(listbox, item_to_edit, parent_window):
     """
     Window to create or edit a 'Combination' tag.
     If item_to_edit is provided, it opens in edit mode.
@@ -985,7 +985,7 @@ def open_combination_window(listbox, item_to_edit):
     is_edit = item_to_edit is not None
     title = "Редактирование сочетания" if is_edit else "Создание сочетания"
 
-    combo_window = tk.Toplevel(window)
+    combo_window = tk.Toplevel(parent_window)
     combo_window.title(title)
     combo_window.resizable(False, False)
     combo_window.focus_set()
@@ -1221,17 +1221,17 @@ def open_edit_tag_window(listbox):
         messagebox.showinfo("Информация", "Редактирование для этого типа тега еще не реализовано.")
 
 
-def delete_tag(listbox):
+def delete_tag(listbox, parent_window):
     """Deletes a tag from its config file and refreshes the UI."""
     selected_item = listbox.selection()
     if not selected_item:
-        messagebox.showwarning("Ошибка", "Выберите тег для удаления")
+        messagebox.showwarning("Ошибка", "Выберите тег для удаления", parent=parent_window)
         return
 
     item_id = selected_item[0]
     name, _, tag_type = listbox.item(item_id, "values")
 
-    if not messagebox.askyesno("Подтверждение", f"Вы точно хотите удалить тег '{name}'?", icon='warning'):
+    if not messagebox.askyesno("Подтверждение", f"Вы точно хотите удалить тег '{name}'?", icon='warning', parent=parent_window):
         return
 
     config_path = None
@@ -1251,7 +1251,7 @@ def delete_tag(listbox):
 
         refresh_main_and_constructor()
     else:
-        messagebox.showerror("Ошибка", "Не удалось определить тип тега для удаления.")
+        messagebox.showerror("Ошибка", "Не удалось определить тип тега для удаления.", parent=parent_window)
 
 
 # This function is needed to refresh the constructor listbox from other windows
@@ -1392,7 +1392,7 @@ def apply_behaviors(behaviors, merge_data):
 
 
 def open_create_rule_window(listbox, constructor_window):
-    create_rule_window = tk.Toplevel()
+    create_rule_window = tk.Toplevel(constructor_window)
     create_rule_window.title("Создать правило")
     create_rule_window.geometry("1070x230")
     create_rule_window.resizable(False, False)
@@ -1614,17 +1614,17 @@ def open_create_rule_window(listbox, constructor_window):
     def validate_and_save():
         rule_name = name_var.get().strip()
         if not rule_name:
-            messagebox.showwarning("Ошибка", "Имя правила не может быть пустым.")
+            messagebox.showwarning("Ошибка", "Имя правила не может быть пустым.", parent=create_rule_window)
             return
 
         rules_config = load_json(RULES_CONFIG_PATH, 'rules_config')
         if rules_config is None:
             rules_config = []
             save_json(RULES_CONFIG_PATH, rules_config)
-            messagebox.showwarning("Информация", f"Создан новый файл конфигурации: {RULES_CONFIG_PATH}")
+            messagebox.showwarning("Информация", f"Создан новый файл конфигурации: {RULES_CONFIG_PATH}", parent=create_rule_window)
 
         if any(rule['name'] == rule_name for rule in rules_config):
-            messagebox.showwarning("Ошибка", "Имя правила уже существует.")
+            messagebox.showwarning("Ошибка", "Имя правила уже существует.", parent=create_rule_window)
             return
 
         conditions = []
@@ -1634,18 +1634,18 @@ def open_create_rule_window(listbox, constructor_window):
             rule = rule_entry.get() if isinstance(rule_entry, tk.Entry) else ""
             if tag and condition:
                 if condition not in ["True", "False"] and not rule:
-                    messagebox.showwarning("Ошибка", "Введите правило для условия.")
+                    messagebox.showwarning("Ошибка", "Введите правило для условия.", parent=create_rule_window)
                     return
                 if condition in ["меньше", "больше", "равно"]:
                     try:
                         float(rule)
                     except ValueError:
                         messagebox.showwarning("Ошибка",
-                                               "Для условий 'меньше', 'больше' или 'равно' введите только число.")
+                                               "Для условий 'меньше', 'больше' или 'равно' введите только число.", parent=create_rule_window)
                         return
                 if condition in ["True", "False"] and tag not in checkbox_vars:
                     messagebox.showwarning("Ошибка",
-                                           f"Тег '{tag}' должен быть чекбоксом для условий 'True' или 'False'.")
+                                           f"Тег '{tag}' должен быть чекбоксом для условий 'True' или 'False'.", parent=create_rule_window)
                     return
                 conditions.append({'tag': tag, 'condition': condition, 'rule': rule})
 
@@ -1662,15 +1662,15 @@ def open_create_rule_window(listbox, constructor_window):
                     return
                 if condition in ["добавить дату", "отнять дату"] and not rule.isdigit():
                     messagebox.showwarning("Ошибка",
-                                           "Для 'добавить дату' или 'отнять дату' введите количество дней в виде числа.")
+                                           "Для 'добавить дату' или 'отнять дату' введите количество дней в виде числа.", parent=create_rule_window)
                     return
                 if condition == "обрезать" and not all(part.isdigit() for part in rule.split(':')):
-                    messagebox.showwarning("Ошибка", "Для 'обрезать' введите диапазон в формате 'start:end' с числами.")
+                    messagebox.showwarning("Ошибка", "Для 'обрезать' введите диапазон в формате 'start:end' с числами.", parent=create_rule_window)
                     return
                 behaviors.append({'tag': tag, 'condition': condition, 'rule': rule})
 
         if not conditions and not behaviors:
-            messagebox.showwarning("Ошибка", "Правило должно содержать хотя бы одно условие или поведение.")
+            messagebox.showwarning("Ошибка", "Правило должно содержать хотя бы одно условие или поведение.", parent=create_rule_window)
             return
 
         new_rule = {
@@ -1681,7 +1681,7 @@ def open_create_rule_window(listbox, constructor_window):
 
         rules_config.append(new_rule)
         save_json(RULES_CONFIG_PATH, rules_config)
-        messagebox.showinfo("Успех", f"Правило '{rule_name}' успешно создано.")
+        messagebox.showinfo("Успех", f"Правило '{rule_name}' успешно создано.", parent=create_rule_window)
         update_rules_listbox(rules_config, listbox)
         listbox.update_idletasks()
         create_rule_window.destroy()
@@ -1697,7 +1697,7 @@ def open_create_rule_window(listbox, constructor_window):
 def open_edit_rule_window(listbox, constructor_window):
     selected_item = listbox.selection()
     if not selected_item:
-        messagebox.showwarning("Ошибка", "Выберите правило для редактирования")
+        messagebox.showwarning("Ошибка", "Выберите правило для редактирования", parent=constructor_window)
         return
 
     item_data = listbox.item(selected_item)
@@ -1710,7 +1710,7 @@ def open_edit_rule_window(listbox, constructor_window):
         messagebox.showerror("Ошибка", f"Правило '{rule_name}' не найдено.")
         return
 
-    edit_rule_window = tk.Toplevel()
+    edit_rule_window = tk.Toplevel(constructor_window)
     edit_rule_window.title(f"Изменить правило: {rule_name}")
     edit_rule_window.geometry("1070x230")
     edit_rule_window.resizable(False, False)
@@ -1915,7 +1915,7 @@ def open_edit_rule_window(listbox, constructor_window):
     def validate_and_save_edit():
         new_rule_name = name_var.get().strip()
         if not new_rule_name:
-            messagebox.showwarning("Ошибка", "Имя правила не может быть пустым.")
+            messagebox.showwarning("Ошибка", "Имя правила не может быть пустым.", parent=edit_rule_window)
             return
 
         rules_config = load_json(RULES_CONFIG_PATH, 'rules_config')
@@ -1923,7 +1923,7 @@ def open_edit_rule_window(listbox, constructor_window):
 
         # Check for name duplication, excluding the current rule being edited
         if new_rule_name != rule_name and any(rule['name'] == new_rule_name for rule in rules_config):
-            messagebox.showwarning("Ошибка", "Имя правила уже существует.")
+            messagebox.showwarning("Ошибка", "Имя правила уже существует.", parent=edit_rule_window)
             return
 
         conditions = []
@@ -1933,14 +1933,14 @@ def open_edit_rule_window(listbox, constructor_window):
             rule = rule_entry.get()
             if tag and condition:
                 if condition not in ["True", "False"] and not rule:
-                    messagebox.showwarning("Ошибка", "Введите правило для условия.")
+                    messagebox.showwarning("Ошибка", "Введите правило для условия.", parent=edit_rule_window)
                     return
                 if condition in ["меньше", "больше", "равно"]:
                     try:
                         float(rule)
                     except ValueError:
                         messagebox.showwarning("Ошибка",
-                                               "Для условий 'меньше', 'больше' или 'равно' введите только число.")
+                                               "Для условий 'меньше', 'больше' или 'равно' введите только число.", parent=edit_rule_window)
                         return
                 conditions.append({'tag': tag, 'condition': condition, 'rule': rule})
 
@@ -1957,10 +1957,10 @@ def open_edit_rule_window(listbox, constructor_window):
                     return
                 if condition in ["добавить дату", "отнять дату"] and not rule.isdigit():
                     messagebox.showwarning("Ошибка",
-                                           "Для 'добавить дату' или 'отнять дату' введите количество дней в виде числа.")
+                                           "Для 'добавить дату' или 'отнять дату' введите количество дней в виде числа.", parent=edit_rule_window)
                     return
                 if condition == "обрезать" and not all(part.isdigit() for part in rule.split(':')):
-                    messagebox.showwarning("Ошибка", "Для 'обрезать' введите диапазон в формате 'start:end' с числами.")
+                    messagebox.showwarning("Ошибка", "Для 'обрезать' введите диапазон в формате 'start:end' с числами.", parent=edit_rule_window)
                     return
                 behaviors.append({'tag': tag, 'condition': condition, 'rule': rule})
 
@@ -1972,7 +1972,7 @@ def open_edit_rule_window(listbox, constructor_window):
         })
 
         save_json(RULES_CONFIG_PATH, updated_rules)
-        messagebox.showinfo("Успех", f"Правило '{new_rule_name}' успешно обновлено.")
+        messagebox.showinfo("Успех", f"Правило '{new_rule_name}' успешно обновлено.", parent=edit_rule_window)
         update_rules_listbox(updated_rules, listbox)
         edit_rule_window.destroy()
 
@@ -1984,40 +1984,40 @@ def open_edit_rule_window(listbox, constructor_window):
     tk.Button(button_frame, text="ОТМЕНА", width=10, command=edit_rule_window.destroy).grid(row=0, column=1, padx=5)
 
 
-def delete_rule(listbox, rules_file=RULES_CONFIG_PATH): # Use the global path
+def delete_rule(listbox, parent_window, rules_file=RULES_CONFIG_PATH): # Use the global path
     selected_item = listbox.selection()
     if not selected_item:
-        messagebox.showwarning("Ошибка", "Выберите правило для удаления")
+        messagebox.showwarning("Ошибка", "Выберите правило для удаления", parent=parent_window)
         return
 
     item = listbox.item(selected_item)
     values = item["values"]
     if not values:
-        messagebox.showwarning("Ошибка", "Данные выбранного правила недоступны")
+        messagebox.showwarning("Ошибка", "Данные выбранного правила недоступны", parent=parent_window )
         return
 
     rule_name = values[0]
-    response = messagebox.askyesno("Подтверждение", f"Вы уверены, что хотите удалить правило '{rule_name}'?")
+    response = messagebox.askyesno("Подтверждение", f"Вы уверены, что хотите удалить правило '{rule_name}'?", parent=parent_window)
     if not response:
         return
 
     # Load existing rules
     existing_rules = load_json(rules_file, 'rules_config')
     if not existing_rules:
-        messagebox.showwarning("Ошибка", "Не удалось загрузить конфигурацию правил")
+        messagebox.showwarning("Ошибка", "Не удалось загрузить конфигурацию правил", parent=parent_window)
         return
 
     # Remove the selected rule
     updated_rules = [rule for rule in existing_rules if rule['name'] != rule_name]
     if len(updated_rules) == len(existing_rules):
-        messagebox.showwarning("Ошибка", f"Правило '{rule_name}' не найдено в конфигурации")
+        messagebox.showwarning("Ошибка", f"Правило '{rule_name}' не найдено в конфигурации", parent=parent_window)
         return
 
     # Save updated rules to JSON
     try:
         save_json(rules_file, updated_rules)
     except Exception as e:
-        messagebox.showerror("Ошибка", f"Не удалось сохранить изменения: {str(e)}")
+        messagebox.showerror("Ошибка", f"Не удалось сохранить изменения: {str(e)}", parent=parent_window)
         return
 
     # Update the listbox
