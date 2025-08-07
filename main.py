@@ -758,7 +758,7 @@ def open_checkbox_window(listbox, item_to_edit, parent_window):
 def open_list_window(listbox, item_to_edit, parent_window):
     """
     Full implementation for CREATING and EDITING lists.
-    Handles both simple and main-key lists, and hides the import button in edit mode.
+    Now for 'список' type in edit mode, uses a main key selector instead of showing all main keys at once.
     """
     is_edit = item_to_edit is not None
     title = "Редактировать список" if is_edit else "Создание списка"
@@ -787,7 +787,6 @@ def open_list_window(listbox, item_to_edit, parent_window):
             config = load_json(COMBOBOX_REGULAR_PATH, '')
             list_data = next((item for item in config if item['name'] == old_name), None)
             if list_data:
-                # For simple lists, we'll populate the text widget later in refresh_table
                 sets_list.append({'initial_values': list_data.get('values', [])})
 
         elif tag_type == 'список':
@@ -799,12 +798,11 @@ def open_list_window(listbox, item_to_edit, parent_window):
                     for main_key, sub_dict in main_key_dict.items():
                         new_set = {
                             "main_key": tk.StringVar(value=main_key),
-                            "key_values": [{"key": tk.StringVar(value=k), "value": tk.StringVar(value=v)} for k, v in
-                                           sub_dict.items()]
+                            "key_values": [{"key": tk.StringVar(value=k), "value": tk.StringVar(value=v)}
+                                           for k, v in sub_dict.items()]
                         }
                         sets_list.append(new_set)
     else:
-        # Default for creation mode
         sets_list.append({"main_key": tk.StringVar(), "key_values": [{"key": tk.StringVar(), "value": tk.StringVar()}]})
 
     # --- Helper Functions ---
@@ -814,7 +812,6 @@ def open_list_window(listbox, item_to_edit, parent_window):
         refresh_table()
 
     def add_key_value_to_specific_set(set_index):
-        """Adds a new key-value row to a specific set."""
         if 0 <= set_index < len(sets_list):
             sets_list[set_index]["key_values"].append({"key": tk.StringVar(), "value": tk.StringVar()})
             refresh_table()
@@ -830,53 +827,62 @@ def open_list_window(listbox, item_to_edit, parent_window):
             widget.destroy()
 
         if not main_key_var.get():
-            # Simple list mode
+            # --- Simple list mode ---
             simple_frame = tk.Frame(table_frame)
             simple_frame.pack(fill="both", expand=True)
             tk.Label(simple_frame, text="Значения (каждое с новой строки):").pack(anchor="w")
             text_area = Text(simple_frame, width=60, height=15)
             text_area.pack(fill="both", expand=True, padx=5, pady=5)
-
-            # Populate text area in edit mode
             if is_edit and sets_list and 'initial_values' in sets_list[0]:
                 text_area.insert('1.0', '\n'.join(sets_list[0]['initial_values']))
-
-            # Hide Import button in edit mode
             if not is_edit:
                 tk.Button(simple_frame, text="Импорт из Excel", command=import_from_excel).pack(pady=5)
             sets_list[0]['widget_ref'] = text_area
+
         else:
-            # Main key list mode
-            for set_index, s in enumerate(sets_list):
-                set_frame = ttk.LabelFrame(table_frame, text=f"Набор {set_index + 1}")
-                set_frame.pack(fill="x", expand=True, padx=5, pady=5)
+            # --- Main key mode with selector ---
+            selector_frame = tk.Frame(table_frame)
+            selector_frame.pack(fill="x", padx=10, pady=5)
 
-                keys_frame = tk.Frame(set_frame)
-                keys_frame.pack(fill="x", padx=10, pady=2)
+            tk.Label(selector_frame, text="Выберите главный ключ:", anchor="w").pack(side="left")
+            main_keys_list = [s["main_key"].get() for s in sets_list if s["main_key"].get().strip()]
+            selected_main_key = tk.StringVar()
+            main_key_combo = ttk.Combobox(selector_frame, values=main_keys_list,
+                                          textvariable=selected_main_key, state="readonly", width=25)
+            main_key_combo.pack(side="left", padx=5)
 
-                tk.Label(keys_frame, text="Главный ключ:", anchor="w").grid(row=0, column=0, sticky="w", pady=2)
-                tk.Entry(keys_frame, textvariable=s["main_key"], width=25).grid(row=0, column=1, sticky="w", padx=5)
+            subkeys_frame = tk.Frame(table_frame)
+            subkeys_frame.pack(fill="x", padx=10, pady=5)
 
-                for i, kv in enumerate(s["key_values"]):
-                    row_num = i + 1
-                    tk.Label(keys_frame, text=f"Ключ {row_num}:", anchor="w").grid(row=row_num, column=0, sticky="w",
-                                                                                   pady=2)
-                    tk.Entry(keys_frame, textvariable=kv["key"], width=20).grid(row=row_num, column=1, sticky="w",
-                                                                                padx=5)
-                    tk.Label(keys_frame, text="Значение:", anchor="w").grid(row=row_num, column=2, sticky="w", padx=5)
-                    tk.Entry(keys_frame, textvariable=kv["value"], width=20).grid(row=row_num, column=3, sticky="w",
-                                                                                  padx=5)
+            def show_subkeys_for_selected(*args):
+                for w in subkeys_frame.winfo_children():
+                    w.destroy()
+                key = selected_main_key.get()
+                set_index = next((i for i, s in enumerate(sets_list) if s["main_key"].get() == key), None)
+                if set_index is None:
+                    return
+                s = sets_list[set_index]
+                tk.Label(subkeys_frame, text=f"Главный ключ:", anchor="w").grid(row=0, column=0, sticky="w", pady=2)
+                tk.Entry(subkeys_frame, textvariable=s["main_key"], width=20).grid(row=0, column=1, sticky="w", padx=5)
+                for i, kv in enumerate(s["key_values"], start=1):
+                    tk.Label(subkeys_frame, text=f"Ключ {i}:", anchor="w").grid(row=i, column=0, sticky="w", pady=2)
+                    tk.Entry(subkeys_frame, textvariable=kv["key"], width=20).grid(row=i, column=1, sticky="w", padx=5)
+                    tk.Label(subkeys_frame, text="Значение:", anchor="w").grid(row=i, column=2, sticky="w", padx=5)
+                    tk.Entry(subkeys_frame, textvariable=kv["value"], width=20).grid(row=i, column=3, sticky="w", padx=5)
+                tk.Button(subkeys_frame, text="Добавить строку",
+                          command=lambda: add_key_value_to_specific_set(set_index)).grid(
+                    row=len(s["key_values"]) + 1, column=0, pady=5)
 
-                tk.Button(set_frame, text="Добавить строку в этот набор",
-                          command=lambda si=set_index: add_key_value_to_specific_set(si)).pack(pady=5)
+            main_key_combo.bind("<<ComboboxSelected>>", show_subkeys_for_selected)
+            if main_keys_list:
+                selected_main_key.set(main_keys_list[0])
+                show_subkeys_for_selected()
 
             control_frame = tk.Frame(table_frame)
             control_frame.pack(pady=10)
-            # Hide Import button in edit mode
+            tk.Button(control_frame, text="Добавить главный ключ", command=add_set).pack(side=LEFT, padx=5)
             if not is_edit:
                 tk.Button(control_frame, text="Импорт", command=import_from_excel).pack(side=LEFT, padx=5)
-            tk.Button(control_frame, text="Строка", command=add_key_value_row).pack(side=LEFT, padx=5)
-            tk.Button(control_frame, text="Добавить", command=add_set).pack(side=LEFT, padx=5)
 
         list_window.update_idletasks()
 
@@ -885,7 +891,6 @@ def open_list_window(listbox, item_to_edit, parent_window):
         if not name:
             messagebox.showwarning("Ошибка", "Введите имя списка.", parent=list_window)
             return
-
         all_configs = (load_json(path, '') for path in
                        [FIELDS_CONFIG_PATH, COMBOBOX_REGULAR_PATH, COMBOBOX_MAINKEY_PATH, COMBINATION_CONFIG_PATH])
         all_names = {item['name'] for config in all_configs for item in config}
@@ -893,7 +898,6 @@ def open_list_window(listbox, item_to_edit, parent_window):
             messagebox.showwarning("Ошибка", f"Имя '{name}' уже используется.", parent=list_window)
             return
 
-        # Determine data structure from UI state
         if not main_key_var.get():
             widget = sets_list[0].get('widget_ref')
             if not widget: return
@@ -905,39 +909,30 @@ def open_list_window(listbox, item_to_edit, parent_window):
             for s in sets_list:
                 mk = s["main_key"].get().strip()
                 if not mk: continue
-                kv_pairs = {kv["key"].get().strip(): kv["value"].get().strip() for kv in s["key_values"] if
-                            kv["key"].get().strip()}
-                if kv_pairs: main_keys.append({mk: kv_pairs})
+                kv_pairs = {kv["key"].get().strip(): kv["value"].get().strip()
+                            for kv in s["key_values"] if kv["key"].get().strip()}
+                if kv_pairs:
+                    main_keys.append({mk: kv_pairs})
             combo_data = {"name": name, "type": "текст", "tag_type": "список", "main_keys": main_keys}
             config_path, other_config_path = COMBOBOX_MAINKEY_PATH, COMBOBOX_REGULAR_PATH
 
-        # --- Save Logic for Edit vs. Create ---
-        # 1. Remove the old entry if it exists, regardless of file
         if is_edit:
-            # Check the original file first
             original_file_path = COMBOBOX_REGULAR_PATH if original_tag_type == 'комбобокс' else COMBOBOX_MAINKEY_PATH
             cfg = load_json(original_file_path, '')
             cfg = [item for item in cfg if item.get('name') != old_name]
             save_json(original_file_path, cfg)
-
-            # If the type changed, the files might be different, so check the other file too
             if config_path != original_file_path:
                 other_cfg = load_json(other_config_path, '')
                 other_cfg = [item for item in other_cfg if item.get('name') != old_name]
                 save_json(other_config_path, other_cfg)
 
-        # 2. Append the new/updated data to the correct file
         final_config = load_json(config_path, '')
         final_config.append(combo_data)
         save_json(config_path, final_config)
-
         refresh_all_windows(listbox)
         list_window.destroy()
 
-    # --- The rest of the window setup remains the same ---
-    # The import function needs to be defined within the scope for the button to call it
     def import_from_excel():
-        # (This function is only called in create mode)
         import_path = r"D:\document_filler\import.xlsx"
         if not os.path.exists(import_path):
             messagebox.showwarning("Ошибка", f"Файл {import_path} не найден", parent=list_window)
@@ -945,7 +940,6 @@ def open_list_window(listbox, item_to_edit, parent_window):
         if not name_var.get().strip():
             messagebox.showwarning("Ошибка", "Введите имя списка перед импортом", parent=list_window)
             return
-
         try:
             wb = openpyxl.load_workbook(import_path)
             sheet = wb.active
@@ -953,15 +947,12 @@ def open_list_window(listbox, item_to_edit, parent_window):
             messagebox.showerror("Ошибка", f"Не удалось открыть файл {import_path}. Ошибка: {str(e)}",
                                  parent=list_window)
             return
-
         if not main_key_var.get():
             values = [str(row[0]).strip() for row in sheet.iter_rows(min_row=1, values_only=True) if
                       row and row[0] is not None]
             if not values:
                 messagebox.showwarning("Ошибка", "В файле не найдено данных для импорта.", parent=list_window)
                 return
-
-            # Bypassing GUI fill, asking for confirmation
             if messagebox.askyesno("Подтверждение импорта",
                                    f"Найдено {len(values)} значений для импорта.\n\n"
                                    "Это окно будет закрыто, и все текущие данные будут перезаписаны.\n"
@@ -969,25 +960,22 @@ def open_list_window(listbox, item_to_edit, parent_window):
                                    parent=list_window):
                 sets_list[0]['widget_ref'].delete('1.0', END)
                 sets_list[0]['widget_ref'].insert('1.0', '\n'.join(values))
-                save_combobox()  # Call save_combobox to finalize the import and close the window
+                save_combobox()
         else:
             main_keys_data = {}
             current_main_key = None
-
             for i, row in enumerate(sheet.iter_rows(min_row=1, values_only=True), 1):
-                if len(row) < 3 or (row[1] is None or str(row[1]).strip() == "") or (
-                        row[2] is None or str(row[2]).strip() == ""):
+                if len(row) < 3 or (row[1] is None or str(row[1]).strip() == "") or \
+                        (row[2] is None or str(row[2]).strip() == ""):
                     if any(c is not None for c in row):
                         messagebox.showwarning("Ошибка",
                                                f"Строка {i}: Неверный формат. Ключ и значение должны быть заполнены.",
                                                parent=list_window)
                         return
                     continue
-
                 main_key = str(row[0]).strip() if row[0] is not None else ""
                 key = str(row[1]).strip()
                 value = str(row[2]).strip()
-
                 if main_key:
                     current_main_key = main_key
                     if current_main_key not in main_keys_data:
@@ -1005,15 +993,10 @@ def open_list_window(listbox, item_to_edit, parent_window):
                                            f"Строка {i}: Ключ '{key}' не имеет предшествующего главного ключа.",
                                            parent=list_window)
                     return
-
             if not main_keys_data:
                 messagebox.showwarning("Ошибка", "В файле не найдено данных для импорта.", parent=list_window)
                 return
-
-            # Calculate subsequent key count for the confirmation dialog
             total_sub_keys = sum(len(d) for d in main_keys_data.values())
-
-            # Bypassing GUI fill, asking for confirmation
             if messagebox.askyesno("Подтверждение импорта",
                                    f"Найдено {len(main_keys_data)} главных ключей и {total_sub_keys} подчинённых ключей.\n\n"
                                    "Это окно будет закрыто, и все текущие данные будут перезаписаны.\n"
@@ -1023,17 +1006,13 @@ def open_list_window(listbox, item_to_edit, parent_window):
                 for main_key, sub_dict in main_keys_data.items():
                     new_set = {
                         "main_key": tk.StringVar(value=main_key),
-                        "key_values": [{"key": tk.StringVar(value=k), "value": tk.StringVar(value=v)} for k, v in
-                                       sub_dict.items()]
+                        "key_values": [{"key": tk.StringVar(value=k), "value": tk.StringVar(value=v)}
+                                       for k, v in sub_dict.items()]
                     }
                     sets_list.append(new_set)
-
-                # The refresh_table() call is not strictly needed here if we immediately call save_combobox()
-                # which will close the window.
                 save_combobox()
 
-    # --- Window Layout Setup ---
-    # The rest of the code remains the same.
+    # --- Window Layout ---
     top_controls_frame = tk.Frame(list_window)
     top_controls_frame.pack(fill="x", padx=10, pady=5)
     table_frame = tk.Frame(list_window)
@@ -1043,11 +1022,9 @@ def open_list_window(listbox, item_to_edit, parent_window):
 
     tk.Label(top_controls_frame, text="Имя списка:").grid(row=0, column=0, sticky="w")
     tk.Entry(top_controls_frame, textvariable=name_var, width=40).grid(row=0, column=1, sticky="ew")
-
     if not is_edit:
         ttk.Checkbutton(top_controls_frame, text="Использовать главный ключ", variable=main_key_var,
                         command=refresh_table).grid(row=1, column=0, columnspan=2, pady=5)
-
     top_controls_frame.grid_columnconfigure(1, weight=1)
 
     tk.Button(bottom_buttons_frame, text="ОК", width=10, command=save_combobox).pack(side=LEFT, padx=5)
@@ -1264,184 +1241,35 @@ def load_combination_config():
         with open(COMBINATION_CONFIG_PATH, 'w', encoding='utf8') as f:
             json.dump([], f, ensure_ascii=False, indent=4)
         return []
-def update_mainkey_list(treeview, combobox_data, selected_main_key):
-    """Populates the Treeview with sub-keys and values for the selected main key."""
-    for item in treeview.get_children():
-        treeview.delete(item)
-
-    if not selected_main_key:
-        return
-
-    sub_keys_data = combobox_data.get(selected_main_key, {})
-    for sub_key, value in sub_keys_data.items():
-        treeview.insert("", "end", values=(sub_key, value))
 
 
-def save_mainkey_list(treeview, all_combobox_data, current_main_key_name, original_main_key_name_entry, edit_window):
-    """Saves the edited sub-keys and values, and the main key name itself."""
-    try:
-        new_main_key_name = original_main_key_name_entry.get().strip()
-        if not new_main_key_name:
-            messagebox.showerror("Ошибка", "Имя главного ключа не может быть пустым.")
-            return
-
-        if new_main_key_name != current_main_key_name and new_main_key_name in all_combobox_data:
-            messagebox.showerror("Ошибка", f"Главный ключ с именем '{new_main_key_name}' уже существует.")
-            return
-
-        new_sub_keys = {}
-        for item_id in treeview.get_children():
-            sub_key_name, value = treeview.item(item_id, 'values')
-            if sub_key_name:
-                new_sub_keys[sub_key_name] = value
-
-        mainkey_config = load_json(COMBOBOX_MAINKEY_PATH, 'combobox_mainkey')
-        found = False
-        for combo in mainkey_config:
-            for mk_dict in combo['main_keys']:
-                if list(mk_dict.keys())[0] == current_main_key_name:
-                    mk_dict.pop(current_main_key_name)
-                    mk_dict[new_main_key_name] = new_sub_keys
-                    found = True
-                    break
-            if found:
-                break
-
-        if not found:
-            messagebox.showerror("Ошибка", "Не удалось найти исходный ключ для обновления.")
-            return
-
-        save_json(COMBOBOX_MAINKEY_PATH, mainkey_config)
-        messagebox.showinfo("Успех", f"Ключ '{new_main_key_name}' и его значения успешно сохранены.")
-        edit_window.destroy()
-
-    except Exception as e:
-        messagebox.showerror("Ошибка", f"Произошла ошибка при сохранении: {e}")
-
-
-def add_row_to_treeview(treeview):
-    """Adds a new empty row to the Treeview for editing."""
-    treeview.insert("", "end", values=("", ""))
-
-
-def delete_row_from_treeview(treeview):
-    """Deletes the selected row from the Treeview."""
-    selected_item = treeview.selection()
+def open_edit_tag_window(listbox, parent_window):
+    """Opens the appropriate window for editing a selected tag."""
+    selected_item = listbox.selection()
     if not selected_item:
-        messagebox.showwarning("Предупреждение", "Пожалуйста, выберите строку для удаления.")
-        return
-    treeview.delete(selected_item)
-
-
-def edit_row_treeview(treeview, edit_window):
-    """Allows inline editing of the selected Treeview cell."""
-    selected_item = treeview.focus()
-    if not selected_item:
+        messagebox.showwarning("Ошибка", "Выберите тег для редактирования.", parent=listbox)
         return
 
-    column = treeview.identify_column(treeview.winfo_pointerx() - treeview.winfo_rootx())
-    if not column:
+    item_id = selected_item[0]
+    item_values = listbox.item(item_id)['values']
+
+    if not item_values or len(item_values) < 3:
+        messagebox.showwarning("Ошибка", "Некорректные данные тега.", parent=listbox)
         return
 
-    x, y, width, height = treeview.bbox(selected_item, column)
-    if column == "#1":
-        column_index = 0
-    elif column == "#2":
-        column_index = 1
+    tag_type = item_values[2]
+
+    # Pass the listbox and the item_id to the specific edit window
+    if tag_type == 'поле':
+        open_field_window(listbox, item_id, parent_window)
+    elif tag_type == 'чекбокс':
+        open_checkbox_window(listbox, item_id, parent_window)
+    elif tag_type == 'комбобокс' or tag_type == 'список':
+        open_list_window(listbox, item_id, parent_window)
+    elif tag_type == 'сочетание':
+        open_combination_window(listbox, item_id, parent_window)
     else:
-        return
-
-    entry_editor = tk.Entry(treeview, bd=0, bg="white")
-    entry_editor.place(x=x, y=y, width=width, height=height)
-
-    current_value = treeview.item(selected_item, 'values')[column_index]
-    entry_editor.insert(0, current_value)
-    entry_editor.focus_set()
-
-    def on_return(event):
-        new_value = entry_editor.get()
-        current_values = list(treeview.item(selected_item, 'values'))
-        current_values[column_index] = new_value
-        treeview.item(selected_item, values=current_values)
-        entry_editor.destroy()
-
-    def on_focus_out(event):
-        on_return(event)
-
-    entry_editor.bind('<Return>', on_return)
-    entry_editor.bind('<FocusOut>', on_focus_out)
-
-def open_edit_tag_window(tags_listbox, parent_window):
-    """Opens a new window to edit the selected tag. Modified to handle main_key comboboxes."""
-    selected_item = tags_listbox.selection()
-    if not selected_item:
-        messagebox.showwarning("Предупреждение", "Пожалуйста, выберите тег для редактирования.")
-        return
-
-    item_data = tags_listbox.item(selected_item)
-    tag_name, tag_type_input, tag_type = item_data['values']
-
-    edit_window = tk.Toplevel(parent_window)
-    edit_window.title(f"Редактировать тег: {tag_name}")
-    edit_window.geometry("600x450")
-    edit_window.grab_set()
-
-    # --- Regular fields, comboboxes, and combinations ---
-    if tag_type not in ["список"]:
-        tk.Label(edit_window, text=f"Редактирование для '{tag_type}' еще не реализовано.").pack(pady=20)
-        return
-
-    # --- Specific logic for 'список' (main_key comboboxes) ---
-    tk.Label(edit_window, text="Выберите главный ключ для редактирования:").pack(pady=5)
-
-    mainkey_config = load_json(COMBOBOX_MAINKEY_PATH, 'combobox_mainkey')
-    combobox_data = {}
-    for combo in mainkey_config:
-        if combo['name'] == tag_name:
-            combobox_data = {list(mk.keys())[0]: list(mk.values())[0] for mk in combo['main_keys']}
-            break
-
-    main_keys = list(combobox_data.keys())
-    selected_main_key_var = tk.StringVar()
-    main_key_combobox = ttk.Combobox(edit_window, values=main_keys, textvariable=selected_main_key_var, state="readonly", width=40)
-    main_key_combobox.pack(pady=5)
-
-    edit_frame = tk.Frame(edit_window)
-    edit_frame.pack(pady=10, fill="both", expand=True)
-
-    tk.Label(edit_frame, text="Имя главного ключа:").pack()
-    original_main_key_name_entry = tk.Entry(edit_frame, width=40)
-    original_main_key_name_entry.pack(pady=(0, 20))
-
-    treeview = ttk.Treeview(edit_frame, columns=("Подключ", "Значение"), show="headings")
-    treeview.heading("Подключ", text="Подключ")
-    treeview.heading("Значение", text="Значение")
-    treeview.column("Подключ", width=150, anchor="center")
-    treeview.column("Значение", width=150, anchor="center")
-    treeview.pack(fill="both", expand=True)
-    treeview.bind('<Double-1>', lambda event: edit_row_treeview(treeview, edit_window))
-
-    buttons_frame = tk.Frame(edit_frame)
-    buttons_frame.pack(pady=5)
-    tk.Button(buttons_frame, text="Добавить строку", command=lambda: add_row_to_treeview(treeview)).pack(side="left", padx=5)
-    tk.Button(buttons_frame, text="Удалить строку", command=lambda: delete_row_from_treeview(treeview)).pack(side="left", padx=5)
-
-    def on_main_key_select(event):
-        selected_key = selected_main_key_var.get()
-        original_main_key_name_entry.delete(0, tk.END)
-        original_main_key_name_entry.insert(0, selected_key)
-        update_mainkey_list(treeview, combobox_data, selected_key)
-
-    main_key_combobox.bind('<<ComboboxSelected>>', on_main_key_select)
-
-    bottom_buttons_frame = tk.Frame(edit_window)
-    bottom_buttons_frame.pack(pady=10)
-    tk.Button(bottom_buttons_frame, text="Сохранить", command=lambda: save_mainkey_list(treeview, combobox_data, selected_main_key_var.get(), original_main_key_name_entry, edit_window)).pack(side="left", padx=10)
-    tk.Button(bottom_buttons_frame, text="Отмена", command=edit_window.destroy).pack(side="left", padx=10)
-
-    if main_keys:
-        main_key_combobox.set(main_keys[0])
-        on_main_key_select(None)
+        messagebox.showinfo("Информация", "Редактирование для этого типа тега еще не реализовано.")
 
 
 def delete_tag(tags_listbox, parent_window):
