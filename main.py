@@ -992,8 +992,12 @@ def open_list_window(listbox, item_to_edit, parent_window):
 
     tk.Label(top_controls_frame, text="Имя списка:").grid(row=0, column=0, sticky="w")
     tk.Entry(top_controls_frame, textvariable=name_var, width=40).grid(row=0, column=1, sticky="ew")
-    ttk.Checkbutton(top_controls_frame, text="Использовать главный ключ", variable=main_key_var,
-                    command=refresh_table).grid(row=1, column=0, columnspan=2, pady=5)
+
+    # This is the line that needs to be conditional.
+    if not is_edit:
+        ttk.Checkbutton(top_controls_frame, text="Использовать главный ключ", variable=main_key_var,
+                        command=refresh_table).grid(row=1, column=0, columnspan=2, pady=5)
+
     top_controls_frame.grid_columnconfigure(1, weight=1)
 
     tk.Button(bottom_buttons_frame, text="ОК", width=10, command=save_combobox).pack(side=LEFT, padx=5)
