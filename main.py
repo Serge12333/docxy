@@ -418,13 +418,13 @@ def add_dynamic_widget(name, data_type, tag_type, values=None, main_key_data=Non
         checkbox._name = name
         checkbox.grid(row=row, column=base_col + 1, padx=5, pady=2, sticky="w")
     elif tag_type == "комбобокс":  # Regular combobox
-        combobox = tkentrycomplete.Combobox(dynamic_frame, values=values, width=22, justify="center")
+        combobox = tkentrycomplete.Combobox(dynamic_frame, values=values, width=22)
         combobox._name = name
         combobox.set_completion_list({v: {} for v in values})
         combobox.grid(row=row, column=base_col + 1, padx=5, pady=2, sticky="w")
     elif tag_type == "список":  # Main-key combobox
         var = tk.StringVar()
-        combobox = tkentrycomplete.Combobox(dynamic_frame, values=values, textvariable=var, width=22, justify="center")
+        combobox = tkentrycomplete.Combobox(dynamic_frame, values=values, textvariable=var, width=22)
         combobox._name = name
         combobox.set_completion_list(main_key_data)
 
@@ -460,6 +460,32 @@ def load_all_dynamic_widgets():
         data_dict = {list(mk.keys())[0]: list(mk.values())[0] for mk in combo['main_keys']}
         add_dynamic_widget(combo['name'], combo['type'], 'список', values=values, main_key_data=data_dict)
 
+
+def get_all_tags_for_constructor():
+    """Gathers a flat list of all tags for use in constructor UI elements."""
+    all_tags = []
+
+    # Add fields, checkboxes, and regular comboboxes
+    all_tags.extend([f['name'] for f in load_json(FIELDS_CONFIG_PATH, 'fields_config')])
+    all_tags.extend([c['name'] for c in load_json(COMBOBOX_REGULAR_PATH, 'combobox_regular')])
+
+    # Add main keys and their subkeys
+    mainkey_combos = load_json(COMBOBOX_MAINKEY_PATH, 'combobox_mainkey')
+    for combo in mainkey_combos:
+        # Add the main key itself
+        all_tags.append(combo['name'])
+        # Add each subkey
+        for mk_dict in combo.get('main_keys', []):
+            # Assumes each main_keys item is a dictionary with one key (main_key)
+            subkeys_dict = list(mk_dict.values())[0]
+            for subkey_name in subkeys_dict.keys():
+                all_tags.append(subkey_name)
+
+    # Add combination tags
+    combination_config = load_json(COMBINATION_CONFIG_PATH, 'combination_config')
+    all_tags.extend([c['name'] for c in combination_config])
+
+    return sorted(list(set(all_tags)))  # Return sorted unique tags
 
 # --- Constructor Window and its Helpers ---
 
@@ -539,7 +565,7 @@ def open_constructor_window():
     tk.Button(tags_buttons_frame, text="Новый", width=14, command=lambda: open_new_tag_window(tags_listbox, constructor_window)).pack(
         side=TOP, pady=2)
     tk.Button(tags_buttons_frame, text="Редактировать", width=14,
-              command=lambda: open_edit_tag_window(tags_listbox)).pack(side=TOP, pady=2)
+              command=lambda: open_edit_tag_window(tags_listbox, constructor_window)).pack(side=TOP, pady=2)
     tk.Button(tags_buttons_frame, text="Удалить", width=14, command=lambda: delete_tag(tags_listbox, constructor_window)).pack(side=TOP,
                                                                                                            pady=2)
     populate_tags_listbox(tags_listbox)
@@ -1006,13 +1032,7 @@ def open_combination_window(listbox, item_to_edit, parent_window):
             messagebox.showwarning("Ошибка", "Данные сочетания не найдены.")
             return
 
-    all_tags = set()
-    for config_path in [FIELDS_CONFIG_PATH, COMBOBOX_REGULAR_PATH, COMBOBOX_MAINKEY_PATH, COMBINATION_CONFIG_PATH]:
-        cfg = load_json(config_path, '')
-        if is_edit and config_path == COMBINATION_CONFIG_PATH:
-            all_tags.update([item['name'] for item in cfg if item['name'] != old_name])
-        else:
-            all_tags.update([item['name'] for item in cfg])
+    all_tags = get_all_tags_for_constructor()
     sorted_tags = sorted(list(all_tags))
 
     def refresh_listbox():
@@ -1192,7 +1212,7 @@ def load_combination_config():
         return []
 
 
-def open_edit_tag_window(listbox):
+def open_edit_tag_window(listbox, parent_window):
     """Opens the appropriate window for editing a selected tag."""
     selected_item = listbox.selection()
     if not selected_item:
@@ -1210,13 +1230,13 @@ def open_edit_tag_window(listbox):
 
     # Pass the listbox and the item_id to the specific edit window
     if tag_type == 'поле':
-        open_field_window(listbox, item_id)
+        open_field_window(listbox, item_id, parent_window)
     elif tag_type == 'чекбокс':
-        open_checkbox_window(listbox, item_id)
+        open_checkbox_window(listbox, item_id, parent_window)
     elif tag_type == 'комбобокс' or tag_type == 'список':
-        open_list_window(listbox, item_id)
+        open_list_window(listbox, item_id, parent_window)
     elif tag_type == 'сочетание':
-        open_combination_window(listbox, item_id)
+        open_combination_window(listbox, item_id, parent_window)
     else:
         messagebox.showinfo("Информация", "Редактирование для этого типа тега еще не реализовано.")
 
@@ -1399,6 +1419,10 @@ def open_create_rule_window(listbox, constructor_window):
     create_rule_window.focus_set()
     create_rule_window.grab_set()
 
+    # Get all tags, sort them, and add a blank option at the start
+    sorted_tags = sorted(list(set(get_all_tags_for_constructor())))
+    sorted_tags.insert(0, '')
+
     main_frame = tk.Frame(create_rule_window)
     main_frame.pack(padx=10, pady=5, fill=tk.BOTH, expand=True)
 
@@ -1408,8 +1432,7 @@ def open_create_rule_window(listbox, constructor_window):
 
     tk.Label(main_frame, text="Имя правила:").grid(row=0, column=0, padx=5, pady=5, sticky="w")
     name_var = tk.StringVar()
-    tk.Entry(main_frame, textvariable=name_var, width=30).grid(row=0, column=1, columnspan=5, padx=5, pady=5,
-                                                               sticky="w")
+    tk.Entry(main_frame, textvariable=name_var, width=30).grid(row=0, column=1, columnspan=5, padx=5, pady=5, sticky="w")
 
     first_column_frame = tk.Frame(main_frame)
     first_column_frame.grid(row=2, column=0, columnspan=3, padx=5, pady=5, sticky="w")
@@ -1420,28 +1443,13 @@ def open_create_rule_window(listbox, constructor_window):
 
     tag_var1 = tk.StringVar()
     tag_combobox1 = ttk.Combobox(first_column_frame, textvariable=tag_var1, width=20, state="readonly")
-    all_tags = set()
-    fields_config = load_json(FIELDS_CONFIG_PATH, 'fields_config')
-    for field in fields_config:
-        all_tags.add(field['name'])
-    regular_combos = load_json(COMBOBOX_REGULAR_PATH, 'combobox_regular')
-    all_tags.update(combo['name'] for combo in regular_combos)
-    mainkey_combos = load_json(COMBOBOX_MAINKEY_PATH, 'combobox_mainkey')
-    all_tags.update(combo['name'] for combo in mainkey_combos)
-    for combo in mainkey_combos:
-        for main_key_dict in combo['main_keys']:
-            for main_key, subkeys in main_key_dict.items():
-                all_tags.update(subkeys.keys())
-    combination_config = load_combination_config()
-    all_tags.update(combo['name'] for combo in combination_config)
-    tag_combobox1['values'] = sorted(all_tags)
+    tag_combobox1['values'] = sorted_tags
     tag_combobox1.grid(row=0, column=0, padx=5, pady=5)
 
     condition_var1 = tk.StringVar()
     condition_combobox1 = ttk.Combobox(first_column_frame, textvariable=condition_var1, width=20, state="readonly")
-    condition_combobox1['values'] = [
-        "содержит", "начинается с", "заканчивается на", "меньше", "больше", "равно", "True", "False"
-    ]
+    # Add a blank option to the condition combobox
+    condition_combobox1['values'] = ["", "содержит", "начинается с", "заканчивается на", "меньше", "больше", "равно", "True", "False"]
     condition_combobox1.grid(row=0, column=1, padx=5, pady=5)
 
     rule_entry_var1 = tk.StringVar()
@@ -1467,14 +1475,13 @@ def open_create_rule_window(listbox, constructor_window):
 
         new_tag_var = tk.StringVar()
         new_tag_combobox = ttk.Combobox(new_frame, textvariable=new_tag_var, width=20, state="readonly")
-        new_tag_combobox['values'] = sorted(all_tags)
+        new_tag_combobox['values'] = sorted_tags
         new_tag_combobox.grid(row=0, column=0, padx=5, pady=5)
 
         new_condition_var = tk.StringVar()
         new_condition_combobox = ttk.Combobox(new_frame, textvariable=new_condition_var, width=20, state="readonly")
-        new_condition_combobox['values'] = [
-            "содержит", "начинается с", "заканчивается на", "меньше", "больше", "равно", "True", "False"
-        ]
+        # Add a blank option to the new condition combobox
+        new_condition_combobox['values'] = ["", "содержит", "начинается с", "заканчивается на", "меньше", "больше", "равно", "True", "False"]
         new_condition_combobox.grid(row=0, column=1, padx=5, pady=5)
 
         new_rule_var = tk.StringVar()
@@ -1516,15 +1523,14 @@ def open_create_rule_window(listbox, constructor_window):
 
     tag_var2 = tk.StringVar()
     tag_combobox2 = ttk.Combobox(second_column_frame, textvariable=tag_var2, width=20, state="readonly")
-    tag_combobox2['values'] = sorted(all_tags)
+    tag_combobox2['values'] = sorted_tags
     tag_combobox2.grid(row=0, column=0, padx=5, pady=5)
 
     condition_var2 = tk.StringVar()
     condition_combobox2 = ttk.Combobox(second_column_frame, textvariable=condition_var2, width=20, state="readonly")
-    condition_combobox2['values'] = [
-        "очистить", "очистить при не выполнении", "CAPS", "верхняя буква", "нижняя буква", "транслит",
-        "добавить текст в начале", "добавить текст в конце", "добавить дату", "отнять дату", "обрезать"
-    ]
+    # Add a blank option to the condition combobox
+    condition_combobox2['values'] = ["", "очистить", "очистить при не выполнении", "CAPS", "верхняя буква", "нижняя буква", "транслит",
+                                     "добавить текст в начале", "добавить текст в конце", "добавить дату", "отнять дату", "обрезать"]
     condition_combobox2.grid(row=0, column=1, padx=5, pady=5)
 
     rule_entry_var2 = tk.StringVar()
@@ -1569,15 +1575,14 @@ def open_create_rule_window(listbox, constructor_window):
 
         new_tag_var = tk.StringVar()
         new_tag_combobox = ttk.Combobox(new_frame, textvariable=new_tag_var, width=20, state="readonly")
-        new_tag_combobox['values'] = sorted(all_tags)
+        new_tag_combobox['values'] = sorted_tags
         new_tag_combobox.grid(row=0, column=0, padx=5, pady=5)
 
         new_condition_var = tk.StringVar()
         new_condition_combobox = ttk.Combobox(new_frame, textvariable=new_condition_var, width=20, state="readonly")
-        new_condition_combobox['values'] = [
-            "очистить", "очистить при не выполнении", "CAPS", "верхняя буква", "нижняя буква", "транслит",
-            "добавить текст в начале", "добавить текст в конце", "добавить дату", "отнять дату", "обрезать"
-        ]
+        # Add a blank option to the new condition combobox
+        new_condition_combobox['values'] = ["", "очистить", "очистить при не выполнении", "CAPS", "верхняя буква", "нижняя буква", "транслит",
+                                            "добавить текст в начале", "добавить текст в конце", "добавить дату", "отнять дату", "обрезать"]
         new_condition_combobox.grid(row=0, column=1, padx=5, pady=5)
 
         new_option_var = tk.StringVar()
@@ -1643,10 +1648,6 @@ def open_create_rule_window(listbox, constructor_window):
                         messagebox.showwarning("Ошибка",
                                                "Для условий 'меньше', 'больше' или 'равно' введите только число.", parent=create_rule_window)
                         return
-                if condition in ["True", "False"] and tag not in checkbox_vars:
-                    messagebox.showwarning("Ошибка",
-                                           f"Тег '{tag}' должен быть чекбоксом для условий 'True' или 'False'.", parent=create_rule_window)
-                    return
                 conditions.append({'tag': tag, 'condition': condition, 'rule': rule})
 
         behaviors = []
@@ -1720,6 +1721,10 @@ def open_edit_rule_window(listbox, constructor_window):
     # Store StringVars to prevent garbage collection
     edit_rule_window._vars_to_keep = []
 
+    # Get all tags including subkeys, sort them, and add a blank option
+    sorted_tags = sorted(list(set(get_all_tags_for_constructor())))
+    sorted_tags.insert(0, '')
+
     main_frame = tk.Frame(edit_rule_window)
     main_frame.pack(padx=10, pady=5, fill=tk.BOTH, expand=True)
 
@@ -1728,8 +1733,7 @@ def open_edit_rule_window(listbox, constructor_window):
 
     tk.Label(main_frame, text="Имя правила:").grid(row=0, column=0, padx=5, pady=5, sticky="w")
     name_var = tk.StringVar(value=rule_name)
-    tk.Entry(main_frame, textvariable=name_var, width=30).grid(row=0, column=1, columnspan=5, padx=5, pady=5,
-                                                               sticky="w")
+    tk.Entry(main_frame, textvariable=name_var, width=30).grid(row=0, column=1, columnspan=5, padx=5, pady=5, sticky="w")
 
     first_column_frame = tk.Frame(main_frame)
     first_column_frame.grid(row=2, column=0, columnspan=3, padx=5, pady=5, sticky="w")
@@ -1737,22 +1741,6 @@ def open_edit_rule_window(listbox, constructor_window):
     tk.Label(main_frame, text="Теги", anchor="center").grid(row=1, column=0, padx=5, pady=5)
     tk.Label(main_frame, text="Условие", anchor="center").grid(row=1, column=1, padx=5, pady=5)
     tk.Label(main_frame, text="Правило", anchor="center").grid(row=1, column=2, padx=5, pady=5)
-
-    all_tags = set()
-    fields_config = load_json(FIELDS_CONFIG_PATH, 'fields_config')
-    for field in fields_config:
-        all_tags.add(field['name'])
-    regular_combos = load_json(COMBOBOX_REGULAR_PATH, 'combobox_regular')
-    all_tags.update(combo['name'] for combo in regular_combos)
-    mainkey_combos = load_json(COMBOBOX_MAINKEY_PATH, 'combobox_mainkey')
-    all_tags.update(combo['name'] for combo in mainkey_combos)
-    for combo in mainkey_combos:
-        for main_key_dict in combo['main_keys']:
-            for main_key, subkeys in main_key_dict.items():
-                all_tags.update(subkeys.keys())
-    combination_config = load_combination_config()
-    all_tags.update(combo['name'] for combo in combination_config)
-    sorted_tags = sorted(all_tags)
 
     buttons_frame_3 = tk.Frame(main_frame)
     buttons_frame_4 = tk.Frame(main_frame)
@@ -1777,7 +1765,7 @@ def open_edit_rule_window(listbox, constructor_window):
         new_condition_var = tk.StringVar()
         new_condition_combobox = ttk.Combobox(new_frame, textvariable=new_condition_var, width=20, state="readonly")
         new_condition_combobox['values'] = [
-            "содержит", "начинается с", "заканчивается на", "меньше", "больше", "равно", "True", "False"
+            "", "содержит", "начинается с", "заканчивается на", "меньше", "больше", "равно", "True", "False"
         ]
         new_condition_combobox.grid(row=0, column=1, padx=5, pady=5)
 
@@ -1863,7 +1851,7 @@ def open_edit_rule_window(listbox, constructor_window):
         new_condition_var = tk.StringVar()
         new_condition_combobox = ttk.Combobox(new_frame, textvariable=new_condition_var, width=20, state="readonly")
         new_condition_combobox['values'] = [
-            "очистить", "очистить при не выполнении", "CAPS", "верхняя буква", "нижняя буква", "транслит",
+            "", "очистить", "очистить при не выполнении", "CAPS", "верхняя буква", "нижняя буква", "транслит",
             "добавить текст в начале", "добавить текст в конце", "добавить дату", "отнять дату", "обрезать"
         ]
         new_condition_combobox.grid(row=0, column=1, padx=5, pady=5)
