@@ -1245,37 +1245,44 @@ def open_edit_tag_window(listbox, parent_window):
         messagebox.showinfo("Информация", "Редактирование для этого типа тега еще не реализовано.")
 
 
-def delete_tag(listbox, parent_window):
-    """Deletes a tag from its config file and refreshes the UI."""
-    selected_item = listbox.selection()
+def delete_tag(tags_listbox, parent_window):
+    """Deletes the selected tag and refreshes the display."""
+    selected_item = tags_listbox.selection()
     if not selected_item:
-        messagebox.showwarning("Ошибка", "Выберите тег для удаления", parent=parent_window)
+        messagebox.showwarning("Предупреждение", "Пожалуйста, выберите тег для удаления.", parent=parent_window)
         return
 
-    item_id = selected_item[0]
-    name, _, tag_type = listbox.item(item_id, "values")
+    item_values = tags_listbox.item(selected_item)['values']
+    tag_name = item_values[0]
+    tag_type = item_values[2]
 
-    if not messagebox.askyesno("Подтверждение", f"Вы точно хотите удалить тег '{name}'?", icon='warning', parent=parent_window):
+    if not messagebox.askyesno("Подтверждение", f"Вы уверены, что хотите удалить тег '{tag_name}'?", parent=parent_window):
         return
 
-    config_path = None
-    if tag_type == 'поле' or tag_type == 'чекбокс':
-        config_path = FIELDS_CONFIG_PATH
-    elif tag_type == 'комбобокс':
-        config_path = COMBOBOX_REGULAR_PATH
-    elif tag_type == 'список':
-        config_path = COMBOBOX_MAINKEY_PATH
-    elif tag_type == 'сочетание':
-        config_path = COMBINATION_CONFIG_PATH
+    try:
+        # Determine the file path based on the tag type
+        config_path = None
+        if tag_type == 'поле' or tag_type == 'чекбокс':
+            config_path = FIELDS_CONFIG_PATH
+        elif tag_type == 'комбобокс':
+            config_path = COMBOBOX_REGULAR_PATH
+        elif tag_type == 'список':
+            config_path = COMBOBOX_MAINKEY_PATH
+        elif tag_type == 'сочетание':
+            config_path = COMBINATION_CONFIG_PATH
 
-    if config_path:
-        config_data = load_json(config_path, '')
-        updated_data = [item for item in config_data if item['name'] != name]
-        save_json(config_path, updated_data)
+        if config_path:
+            config = load_json(config_path, '')
+            config = [item for item in config if item.get('name') != tag_name]
+            save_json(config_path, config)
 
-        refresh_main_and_constructor()
-    else:
-        messagebox.showerror("Ошибка", "Не удалось определить тип тега для удаления.", parent=parent_window)
+        # After deleting the tag, refresh all windows to update the listbox
+        refresh_all_windows(tags_listbox)
+
+        messagebox.showinfo("Успех", f"Тег '{tag_name}' был успешно удален.", parent=parent_window)
+
+    except Exception as e:
+        messagebox.showerror("Ошибка", f"Произошла ошибка при удалении тега: {e}", parent=parent_window)
 
 
 # This function is needed to refresh the constructor listbox from other windows
