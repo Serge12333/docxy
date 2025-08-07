@@ -1264,35 +1264,184 @@ def load_combination_config():
         with open(COMBINATION_CONFIG_PATH, 'w', encoding='utf8') as f:
             json.dump([], f, ensure_ascii=False, indent=4)
         return []
+def update_mainkey_list(treeview, combobox_data, selected_main_key):
+    """Populates the Treeview with sub-keys and values for the selected main key."""
+    for item in treeview.get_children():
+        treeview.delete(item)
+
+    if not selected_main_key:
+        return
+
+    sub_keys_data = combobox_data.get(selected_main_key, {})
+    for sub_key, value in sub_keys_data.items():
+        treeview.insert("", "end", values=(sub_key, value))
 
 
-def open_edit_tag_window(listbox, parent_window):
-    """Opens the appropriate window for editing a selected tag."""
-    selected_item = listbox.selection()
+def save_mainkey_list(treeview, all_combobox_data, current_main_key_name, original_main_key_name_entry, edit_window):
+    """Saves the edited sub-keys and values, and the main key name itself."""
+    try:
+        new_main_key_name = original_main_key_name_entry.get().strip()
+        if not new_main_key_name:
+            messagebox.showerror("Ошибка", "Имя главного ключа не может быть пустым.")
+            return
+
+        if new_main_key_name != current_main_key_name and new_main_key_name in all_combobox_data:
+            messagebox.showerror("Ошибка", f"Главный ключ с именем '{new_main_key_name}' уже существует.")
+            return
+
+        new_sub_keys = {}
+        for item_id in treeview.get_children():
+            sub_key_name, value = treeview.item(item_id, 'values')
+            if sub_key_name:
+                new_sub_keys[sub_key_name] = value
+
+        mainkey_config = load_json(COMBOBOX_MAINKEY_PATH, 'combobox_mainkey')
+        found = False
+        for combo in mainkey_config:
+            for mk_dict in combo['main_keys']:
+                if list(mk_dict.keys())[0] == current_main_key_name:
+                    mk_dict.pop(current_main_key_name)
+                    mk_dict[new_main_key_name] = new_sub_keys
+                    found = True
+                    break
+            if found:
+                break
+
+        if not found:
+            messagebox.showerror("Ошибка", "Не удалось найти исходный ключ для обновления.")
+            return
+
+        save_json(COMBOBOX_MAINKEY_PATH, mainkey_config)
+        messagebox.showinfo("Успех", f"Ключ '{new_main_key_name}' и его значения успешно сохранены.")
+        edit_window.destroy()
+
+    except Exception as e:
+        messagebox.showerror("Ошибка", f"Произошла ошибка при сохранении: {e}")
+
+
+def add_row_to_treeview(treeview):
+    """Adds a new empty row to the Treeview for editing."""
+    treeview.insert("", "end", values=("", ""))
+
+
+def delete_row_from_treeview(treeview):
+    """Deletes the selected row from the Treeview."""
+    selected_item = treeview.selection()
     if not selected_item:
-        messagebox.showwarning("Ошибка", "Выберите тег для редактирования.", parent=listbox)
+        messagebox.showwarning("Предупреждение", "Пожалуйста, выберите строку для удаления.")
+        return
+    treeview.delete(selected_item)
+
+
+def edit_row_treeview(treeview, edit_window):
+    """Allows inline editing of the selected Treeview cell."""
+    selected_item = treeview.focus()
+    if not selected_item:
         return
 
-    item_id = selected_item[0]
-    item_values = listbox.item(item_id)['values']
-
-    if not item_values or len(item_values) < 3:
-        messagebox.showwarning("Ошибка", "Некорректные данные тега.", parent=listbox)
+    column = treeview.identify_column(treeview.winfo_pointerx() - treeview.winfo_rootx())
+    if not column:
         return
 
-    tag_type = item_values[2]
-
-    # Pass the listbox and the item_id to the specific edit window
-    if tag_type == 'поле':
-        open_field_window(listbox, item_id, parent_window)
-    elif tag_type == 'чекбокс':
-        open_checkbox_window(listbox, item_id, parent_window)
-    elif tag_type == 'комбобокс' or tag_type == 'список':
-        open_list_window(listbox, item_id, parent_window)
-    elif tag_type == 'сочетание':
-        open_combination_window(listbox, item_id, parent_window)
+    x, y, width, height = treeview.bbox(selected_item, column)
+    if column == "#1":
+        column_index = 0
+    elif column == "#2":
+        column_index = 1
     else:
-        messagebox.showinfo("Информация", "Редактирование для этого типа тега еще не реализовано.")
+        return
+
+    entry_editor = tk.Entry(treeview, bd=0, bg="white")
+    entry_editor.place(x=x, y=y, width=width, height=height)
+
+    current_value = treeview.item(selected_item, 'values')[column_index]
+    entry_editor.insert(0, current_value)
+    entry_editor.focus_set()
+
+    def on_return(event):
+        new_value = entry_editor.get()
+        current_values = list(treeview.item(selected_item, 'values'))
+        current_values[column_index] = new_value
+        treeview.item(selected_item, values=current_values)
+        entry_editor.destroy()
+
+    def on_focus_out(event):
+        on_return(event)
+
+    entry_editor.bind('<Return>', on_return)
+    entry_editor.bind('<FocusOut>', on_focus_out)
+
+def open_edit_tag_window(tags_listbox, parent_window):
+    """Opens a new window to edit the selected tag. Modified to handle main_key comboboxes."""
+    selected_item = tags_listbox.selection()
+    if not selected_item:
+        messagebox.showwarning("Предупреждение", "Пожалуйста, выберите тег для редактирования.")
+        return
+
+    item_data = tags_listbox.item(selected_item)
+    tag_name, tag_type_input, tag_type = item_data['values']
+
+    edit_window = tk.Toplevel(parent_window)
+    edit_window.title(f"Редактировать тег: {tag_name}")
+    edit_window.geometry("600x450")
+    edit_window.grab_set()
+
+    # --- Regular fields, comboboxes, and combinations ---
+    if tag_type not in ["список"]:
+        tk.Label(edit_window, text=f"Редактирование для '{tag_type}' еще не реализовано.").pack(pady=20)
+        return
+
+    # --- Specific logic for 'список' (main_key comboboxes) ---
+    tk.Label(edit_window, text="Выберите главный ключ для редактирования:").pack(pady=5)
+
+    mainkey_config = load_json(COMBOBOX_MAINKEY_PATH, 'combobox_mainkey')
+    combobox_data = {}
+    for combo in mainkey_config:
+        if combo['name'] == tag_name:
+            combobox_data = {list(mk.keys())[0]: list(mk.values())[0] for mk in combo['main_keys']}
+            break
+
+    main_keys = list(combobox_data.keys())
+    selected_main_key_var = tk.StringVar()
+    main_key_combobox = ttk.Combobox(edit_window, values=main_keys, textvariable=selected_main_key_var, state="readonly", width=40)
+    main_key_combobox.pack(pady=5)
+
+    edit_frame = tk.Frame(edit_window)
+    edit_frame.pack(pady=10, fill="both", expand=True)
+
+    tk.Label(edit_frame, text="Имя главного ключа:").pack()
+    original_main_key_name_entry = tk.Entry(edit_frame, width=40)
+    original_main_key_name_entry.pack(pady=(0, 20))
+
+    treeview = ttk.Treeview(edit_frame, columns=("Подключ", "Значение"), show="headings")
+    treeview.heading("Подключ", text="Подключ")
+    treeview.heading("Значение", text="Значение")
+    treeview.column("Подключ", width=150, anchor="center")
+    treeview.column("Значение", width=150, anchor="center")
+    treeview.pack(fill="both", expand=True)
+    treeview.bind('<Double-1>', lambda event: edit_row_treeview(treeview, edit_window))
+
+    buttons_frame = tk.Frame(edit_frame)
+    buttons_frame.pack(pady=5)
+    tk.Button(buttons_frame, text="Добавить строку", command=lambda: add_row_to_treeview(treeview)).pack(side="left", padx=5)
+    tk.Button(buttons_frame, text="Удалить строку", command=lambda: delete_row_from_treeview(treeview)).pack(side="left", padx=5)
+
+    def on_main_key_select(event):
+        selected_key = selected_main_key_var.get()
+        original_main_key_name_entry.delete(0, tk.END)
+        original_main_key_name_entry.insert(0, selected_key)
+        update_mainkey_list(treeview, combobox_data, selected_key)
+
+    main_key_combobox.bind('<<ComboboxSelected>>', on_main_key_select)
+
+    bottom_buttons_frame = tk.Frame(edit_window)
+    bottom_buttons_frame.pack(pady=10)
+    tk.Button(bottom_buttons_frame, text="Сохранить", command=lambda: save_mainkey_list(treeview, combobox_data, selected_main_key_var.get(), original_main_key_name_entry, edit_window)).pack(side="left", padx=10)
+    tk.Button(bottom_buttons_frame, text="Отмена", command=edit_window.destroy).pack(side="left", padx=10)
+
+    if main_keys:
+        main_key_combobox.set(main_keys[0])
+        on_main_key_select(None)
 
 
 def delete_tag(tags_listbox, parent_window):
