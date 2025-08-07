@@ -960,29 +960,80 @@ def open_list_window(listbox, item_to_edit, parent_window):
             if not values:
                 messagebox.showwarning("Ошибка", "В файле не найдено данных для импорта.", parent=list_window)
                 return
-            sets_list[0]['widget_ref'].delete('1.0', END)
-            sets_list[0]['widget_ref'].insert('1.0', '\n'.join(values))
+
+            # Bypassing GUI fill, asking for confirmation
+            if messagebox.askyesno("Подтверждение импорта",
+                                   f"Найдено {len(values)} значений для импорта.\n\n"
+                                   "Это окно будет закрыто, и все текущие данные будут перезаписаны.\n"
+                                   "Продолжить?",
+                                   parent=list_window):
+                sets_list[0]['widget_ref'].delete('1.0', END)
+                sets_list[0]['widget_ref'].insert('1.0', '\n'.join(values))
+                save_combobox()  # Call save_combobox to finalize the import and close the window
         else:
             main_keys_data = {}
-            for i, row in enumerate(sheet.iter_rows(min_row=1, values_only=True), 1):
-                if len(row) < 3 or row[0] is None or row[1] is None or row[2] is None:
-                    continue  # Silently skip malformed rows
-                main_key, key, value = str(row[0]).strip(), str(row[1]).strip(), str(row[2]).strip()
-                if not main_keys_data.get(main_key):
-                    main_keys_data[main_key] = {}
-                main_keys_data[main_key][key] = value
+            current_main_key = None
 
-            sets_list.clear()
-            for main_key, sub_dict in main_keys_data.items():
-                new_set = {
-                    "main_key": tk.StringVar(value=main_key),
-                    "key_values": [{"key": tk.StringVar(value=k), "value": tk.StringVar(value=v)} for k, v in
-                                   sub_dict.items()]
-                }
-                sets_list.append(new_set)
-            refresh_table()
+            for i, row in enumerate(sheet.iter_rows(min_row=1, values_only=True), 1):
+                if len(row) < 3 or (row[1] is None or str(row[1]).strip() == "") or (
+                        row[2] is None or str(row[2]).strip() == ""):
+                    if any(c is not None for c in row):
+                        messagebox.showwarning("Ошибка",
+                                               f"Строка {i}: Неверный формат. Ключ и значение должны быть заполнены.",
+                                               parent=list_window)
+                        return
+                    continue
+
+                main_key = str(row[0]).strip() if row[0] is not None else ""
+                key = str(row[1]).strip()
+                value = str(row[2]).strip()
+
+                if main_key:
+                    current_main_key = main_key
+                    if current_main_key not in main_keys_data:
+                        main_keys_data[current_main_key] = {}
+                    main_keys_data[current_main_key][key] = value
+                elif current_main_key:
+                    if key in main_keys_data[current_main_key]:
+                        messagebox.showwarning("Ошибка",
+                                               f"Строка {i}: Дублирующийся ключ '{key}' для главного ключа '{current_main_key}'.",
+                                               parent=list_window)
+                        return
+                    main_keys_data[current_main_key][key] = value
+                else:
+                    messagebox.showwarning("Ошибка",
+                                           f"Строка {i}: Ключ '{key}' не имеет предшествующего главного ключа.",
+                                           parent=list_window)
+                    return
+
+            if not main_keys_data:
+                messagebox.showwarning("Ошибка", "В файле не найдено данных для импорта.", parent=list_window)
+                return
+
+            # Calculate subsequent key count for the confirmation dialog
+            total_sub_keys = sum(len(d) for d in main_keys_data.values())
+
+            # Bypassing GUI fill, asking for confirmation
+            if messagebox.askyesno("Подтверждение импорта",
+                                   f"Найдено {len(main_keys_data)} главных ключей и {total_sub_keys} подчинённых ключей.\n\n"
+                                   "Это окно будет закрыто, и все текущие данные будут перезаписаны.\n"
+                                   "Продолжить?",
+                                   parent=list_window):
+                sets_list.clear()
+                for main_key, sub_dict in main_keys_data.items():
+                    new_set = {
+                        "main_key": tk.StringVar(value=main_key),
+                        "key_values": [{"key": tk.StringVar(value=k), "value": tk.StringVar(value=v)} for k, v in
+                                       sub_dict.items()]
+                    }
+                    sets_list.append(new_set)
+
+                # The refresh_table() call is not strictly needed here if we immediately call save_combobox()
+                # which will close the window.
+                save_combobox()
 
     # --- Window Layout Setup ---
+    # The rest of the code remains the same.
     top_controls_frame = tk.Frame(list_window)
     top_controls_frame.pack(fill="x", padx=10, pady=5)
     table_frame = tk.Frame(list_window)
@@ -993,7 +1044,6 @@ def open_list_window(listbox, item_to_edit, parent_window):
     tk.Label(top_controls_frame, text="Имя списка:").grid(row=0, column=0, sticky="w")
     tk.Entry(top_controls_frame, textvariable=name_var, width=40).grid(row=0, column=1, sticky="ew")
 
-    # This is the line that needs to be conditional.
     if not is_edit:
         ttk.Checkbutton(top_controls_frame, text="Использовать главный ключ", variable=main_key_var,
                         command=refresh_table).grid(row=1, column=0, columnspan=2, pady=5)
