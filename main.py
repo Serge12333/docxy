@@ -30,6 +30,7 @@ COMBOBOX_REGULAR_PATH = r'D:\document_filler\combobox_regular.json'
 COMBOBOX_MAINKEY_PATH = r'D:\document_filler\combobox_mainkey.json'
 COMBINATION_CONFIG_PATH = r'D:\document_filler\combination_config.json'
 RULES_CONFIG_PATH = r'D:\document_filler\rules_config.json'
+ALL_TAGS_OUTPUT_PATH = r'D:\document_filler\all_tags.json'
 
 
 # --- Utility and Core Logic Functions ---
@@ -133,6 +134,63 @@ def refresh_all_windows(listbox_to_refresh):
     # Refresh the constructor's listbox
     if listbox_to_refresh and listbox_to_refresh.winfo_exists():
         populate_tags_listbox(listbox_to_refresh)
+
+
+def export_all_tags_to_json(parent_window):
+    """
+    Silently collects all available tags, sorts them alphabetically,
+    and saves them to a single JSON file. Only shows a message on error.
+    """
+    try:
+        all_tags = set()
+
+        # 1. Add the hardcoded 'today_tag'
+        all_tags.add('today_tag')
+
+        # 2. Load tags from fields_config.json
+        fields_config = load_json(FIELDS_CONFIG_PATH, 'fields_config')
+        for field in fields_config:
+            all_tags.add(field['name'])
+
+        # 3. Load tags from combobox_regular.json
+        regular_combos = load_json(COMBOBOX_REGULAR_PATH, 'combobox_regular')
+        for combo in regular_combos:
+            all_tags.add(combo['name'])
+
+        # 4. Load from combobox_mainkey.json (both main keys and all sub-keys)
+        mainkey_combos = load_json(COMBOBOX_MAINKEY_PATH, 'combobox_mainkey')
+        for combo in mainkey_combos:
+            all_tags.add(combo['name'])  # Add the main key itself
+            for mk_dict in combo.get('main_keys', []):
+                if mk_dict:
+                    subkeys_dict = list(mk_dict.values())[0]
+                    for subkey_name in subkeys_dict.keys():
+                        all_tags.add(subkey_name)
+
+        # 5. Load from combination_config.json (only the combination's name)
+        combination_config = load_json(COMBINATION_CONFIG_PATH, 'combination_config')
+        for combo in combination_config:
+            all_tags.add(combo['name'])
+
+        # Sort the final list alphabetically (case-insensitive)
+        sorted_tags_list = sorted(list(all_tags), key=str.lower)
+
+        # Save the sorted list to the new JSON file
+        save_json(ALL_TAGS_OUTPUT_PATH, sorted_tags_list)
+
+        # Print a silent confirmation to the console instead of a popup
+        print(f"Tag list updated: {len(sorted_tags_list)} tags exported to {ALL_TAGS_OUTPUT_PATH}")
+
+    except Exception as e:
+        # Still show an error if something goes wrong
+        messagebox.showerror("Ошибка экспорта тегов", f"Произошла ошибка при автоматическом экспорте тегов: {e}",
+                             parent=parent_window)
+
+def on_constructor_close(window_to_destroy):
+    """Handles the closing event for the constructor window."""
+    # The main 'window' is passed as the parent for any potential error message
+    export_all_tags_to_json(window)
+    window_to_destroy.destroy()
 
 def get_common_merge_data():
     """Collects data from all dynamically created UI elements for the mail merge."""
@@ -596,6 +654,9 @@ def open_constructor_window():
     constructor_window.title("Конструктор")
     constructor_window.geometry("1200x600")
     constructor_window.focus_set()
+
+    # This intercepts the "X" button press and calls our custom function
+    constructor_window.protocol("WM_DELETE_WINDOW", lambda: on_constructor_close(constructor_window))
 
     notebook = ttk.Notebook(constructor_window)
     notebook.pack(pady=10, padx=10, fill="both", expand=True)
