@@ -1414,43 +1414,62 @@ def open_edit_tag_window(listbox, parent_window):
 
 
 def delete_tag(tags_listbox, parent_window):
-    """Deletes the selected tag and refreshes the display."""
-    selected_item = tags_listbox.selection()
-    if not selected_item:
-        messagebox.showwarning("Предупреждение", "Пожалуйста, выберите тег для удаления.", parent=parent_window)
+    """Deletes one or more selected tags and refreshes the display."""
+    selected_items = tags_listbox.selection()
+    if not selected_items:
+        messagebox.showwarning("Предупреждение", "Пожалуйста, выберите тег(и) для удаления.", parent=parent_window)
         return
 
-    item_values = tags_listbox.item(selected_item)['values']
-    tag_name = item_values[0]
-    tag_type = item_values[2]
+    # Collect details of all selected tags for the confirmation message
+    tags_to_delete = []
+    for item_id in selected_items:
+        item_values = tags_listbox.item(item_id)['values']
+        tag_name = item_values[0]
+        tag_type = item_values[2]
+        tags_to_delete.append({'name': tag_name, 'type': tag_type})
 
-    if not messagebox.askyesno("Подтверждение", f"Вы уверены, что хотите удалить тег '{tag_name}'?", parent=parent_window):
+    # Format a user-friendly confirmation message
+    names_str = "\n- ".join([t['name'] for t in tags_to_delete])
+    if not messagebox.askyesno("Подтверждение", f"Вы уверены, что хотите удалить следующие теги?\n\n- {names_str}",
+                               parent=parent_window):
         return
 
     try:
-        # Determine the file path based on the tag type
-        config_path = None
-        if tag_type == 'поле' or tag_type == 'чекбокс':
-            config_path = FIELDS_CONFIG_PATH
-        elif tag_type == 'комбобокс':
-            config_path = COMBOBOX_REGULAR_PATH
-        elif tag_type == 'список':
-            config_path = COMBOBOX_MAINKEY_PATH
-        elif tag_type == 'сочетание':
-            config_path = COMBINATION_CONFIG_PATH
+        # Group deletions by configuration file to avoid reading/writing the same file multiple times
+        deletions_by_file = {
+            FIELDS_CONFIG_PATH: set(),
+            COMBOBOX_REGULAR_PATH: set(),
+            COMBOBOX_MAINKEY_PATH: set(),
+            COMBINATION_CONFIG_PATH: set()
+        }
 
-        if config_path:
-            config = load_json(config_path, '')
-            config = [item for item in config if item.get('name') != tag_name]
-            save_json(config_path, config)
+        for tag in tags_to_delete:
+            tag_name = tag['name']
+            tag_type = tag['type']
+            if tag_type in ('поле', 'чекбокс'):
+                deletions_by_file[FIELDS_CONFIG_PATH].add(tag_name)
+            elif tag_type == 'комбобокс':
+                deletions_by_file[COMBOBOX_REGULAR_PATH].add(tag_name)
+            elif tag_type == 'список':
+                deletions_by_file[COMBOBOX_MAINKEY_PATH].add(tag_name)
+            elif tag_type == 'сочетание':
+                deletions_by_file[COMBINATION_CONFIG_PATH].add(tag_name)
 
-        # After deleting the tag, refresh all windows to update the listbox
+        # Process each configuration file that has items to be deleted
+        for config_path, names_to_delete_set in deletions_by_file.items():
+            if not names_to_delete_set:
+                continue
+
+            config_data = load_json(config_path, '')
+            updated_data = [item for item in config_data if item.get('name') not in names_to_delete_set]
+            save_json(config_path, updated_data)
+
+        # Refresh the UI once after all deletions are complete
         refresh_all_windows(tags_listbox)
-
-        messagebox.showinfo("Успех", f"Тег '{tag_name}' был успешно удален.", parent=parent_window)
+        messagebox.showinfo("Успех", "Выбранные теги были успешно удалены.", parent=parent_window)
 
     except Exception as e:
-        messagebox.showerror("Ошибка", f"Произошла ошибка при удалении тега: {e}", parent=parent_window)
+        messagebox.showerror("Ошибка", f"Произошла ошибка при удалении тегов: {e}", parent=parent_window)
 
 
 # This function is needed to refresh the constructor listbox from other windows
@@ -2156,45 +2175,41 @@ def open_edit_rule_window(listbox, constructor_window):
     tk.Button(button_frame, text="ОТМЕНА", width=10, command=edit_rule_window.destroy).grid(row=0, column=1, padx=5)
 
 
-def delete_rule(listbox, parent_window, rules_file=RULES_CONFIG_PATH): # Use the global path
-    selected_item = listbox.selection()
-    if not selected_item:
-        messagebox.showwarning("Ошибка", "Выберите правило для удаления", parent=parent_window)
+def delete_rule(listbox, parent_window, rules_file=RULES_CONFIG_PATH):
+    """Deletes one or more selected rules."""
+    selected_items = listbox.selection()
+    if not selected_items:
+        messagebox.showwarning("Ошибка", "Выберите правило(а) для удаления", parent=parent_window)
         return
 
-    item = listbox.item(selected_item)
-    values = item["values"]
-    if not values:
-        messagebox.showwarning("Ошибка", "Данные выбранного правила недоступны", parent=parent_window )
-        return
+    # Collect the names of all selected rules
+    rules_to_delete_names = [listbox.item(item_id)['values'][0] for item_id in selected_items]
 
-    rule_name = values[0]
-    response = messagebox.askyesno("Подтверждение", f"Вы уверены, что хотите удалить правило '{rule_name}'?", parent=parent_window)
+    # Format a user-friendly confirmation message
+    names_str = "\n- ".join(rules_to_delete_names)
+    response = messagebox.askyesno("Подтверждение",
+                                   f"Вы уверены, что хотите удалить следующие правила?\n\n- {names_str}",
+                                   parent=parent_window)
     if not response:
         return
 
-    # Load existing rules
-    existing_rules = load_json(rules_file, 'rules_config')
-    if not existing_rules:
-        messagebox.showwarning("Ошибка", "Не удалось загрузить конфигурацию правил", parent=parent_window)
-        return
-
-    # Remove the selected rule
-    updated_rules = [rule for rule in existing_rules if rule['name'] != rule_name]
-    if len(updated_rules) == len(existing_rules):
-        messagebox.showwarning("Ошибка", f"Правило '{rule_name}' не найдено в конфигурации", parent=parent_window)
-        return
-
-    # Save updated rules to JSON
     try:
+        existing_rules = load_json(rules_file, 'rules_config')
+        if not isinstance(existing_rules, list):  # Basic validation
+            existing_rules = []
+
+        # Use a set for efficient filtering
+        rules_to_delete_set = set(rules_to_delete_names)
+        updated_rules = [rule for rule in existing_rules if rule.get('name') not in rules_to_delete_set]
+
         save_json(rules_file, updated_rules)
+
+        # Update the listbox with the new data
+        update_rules_listbox(updated_rules, listbox)
+        messagebox.showinfo("Успех", "Выбранные правила были успешно удалены.", parent=parent_window)
+
     except Exception as e:
         messagebox.showerror("Ошибка", f"Не удалось сохранить изменения: {str(e)}", parent=parent_window)
-        return
-
-    # Update the listbox
-    update_rules_listbox(updated_rules, listbox)
-    print(f"Deleted rule: {rule_name}")
 
 
 # --- Main Application Window Setup ---
