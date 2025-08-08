@@ -442,23 +442,59 @@ def add_dynamic_widget(name, data_type, tag_type, values=None, main_key_data=Non
 
 
 def load_all_dynamic_widgets():
-    """Loads all configured fields, checkboxes, and comboboxes from JSON files."""
-    # Load Fields and Checkboxes
+    """Loads all configured fields, comboboxes, and checkboxes from JSON files,
+    grouping them as: Fields → Comboboxes → Checkboxes, each sorted A–Z,
+    with separators between groups."""
+    # Temporary storage for grouping
+    fields_list = []
+    comboboxes_list = []
+    checkboxes_list = []
+
+    # --- Load Fields & Checkboxes ---
     fields_config = load_json(FIELDS_CONFIG_PATH, 'fields_config')
     for field in fields_config:
-        add_dynamic_widget(field['name'], field['type'], field.get('tag_type', 'поле'))
+        tag_type = field.get('tag_type', 'поле')
+        if tag_type == 'чекбокс':
+            checkboxes_list.append((field['name'], field['type'], tag_type, None, None))
+        else:  # Regular text field
+            fields_list.append((field['name'], field['type'], tag_type, None, None))
 
-    # Load Regular Comboboxes
+    # --- Load Regular Comboboxes ---
     regular_combos = load_json(COMBOBOX_REGULAR_PATH, 'combobox_regular')
     for combo in regular_combos:
-        add_dynamic_widget(combo['name'], combo['type'], 'комбобокс', values=combo['values'])
+        comboboxes_list.append((combo['name'], combo['type'], 'комбобокс', combo['values'], None))
 
-    # Load Main-Key Comboboxes
+    # --- Load Main-Key Comboboxes ---
     mainkey_combos = load_json(COMBOBOX_MAINKEY_PATH, 'combobox_mainkey')
     for combo in mainkey_combos:
         values = [list(mk.keys())[0] for mk in combo['main_keys']]
         data_dict = {list(mk.keys())[0]: list(mk.values())[0] for mk in combo['main_keys']}
-        add_dynamic_widget(combo['name'], combo['type'], 'список', values=values, main_key_data=data_dict)
+        comboboxes_list.append((combo['name'], combo['type'], 'список', values, data_dict))
+
+    # --- Sort each group alphabetically by name ---
+    fields_list.sort(key=lambda x: x[0].lower())
+    comboboxes_list.sort(key=lambda x: x[0].lower())
+    checkboxes_list.sort(key=lambda x: x[0].lower())
+
+    # --- Combine groups in desired order ---
+    ordered_widgets = fields_list + comboboxes_list + checkboxes_list
+
+    # --- Place widgets in order with separators between groups ---
+    for idx, (name, data_type, tag_type, values, main_key_data) in enumerate(ordered_widgets):
+        # Separator after last field
+        if idx == len(fields_list) and fields_list and comboboxes_list:
+            row, _ = get_next_grid_position()
+            sep = ttk.Separator(dynamic_frame, orient="horizontal")
+
+
+        # Separator after last combobox
+        if idx == len(fields_list) + len(comboboxes_list) and comboboxes_list and checkboxes_list:
+            row, _ = get_next_grid_position()
+            sep = ttk.Separator(dynamic_frame, orient="horizontal")
+
+
+        add_dynamic_widget(name, data_type, tag_type, values, main_key_data)
+
 
 
 def get_all_tags_for_constructor():
