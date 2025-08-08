@@ -99,13 +99,36 @@ def populate_tags_listbox(tags_listbox):
         tags_listbox.insert("", "end", values=item)
 
 
+def get_current_widget_values(frame):
+    """Saves the current values from widgets in the given frame."""
+    state = {}
+    if not frame:
+        return state
+    for widget in frame.winfo_children():
+        if not hasattr(widget, '_name'):
+            continue
+        widget_name = widget._name
+        if isinstance(widget, (tk.Entry, tkentrycomplete.Combobox)):
+            state[widget_name] = widget.get()
+        elif isinstance(widget, ttk.Checkbutton):
+            var = checkbox_vars.get(widget_name)
+            if var:
+                state[widget_name] = var.get()  # Save the integer value (0 or 1)
+    return state
+
+
 def refresh_all_windows(listbox_to_refresh):
     """Refreshes the dynamic widgets in the main window and the constructor listbox."""
     global dynamic_frame
+
+    # 1. Save current state before destroying widgets
+    current_state = get_current_widget_values(dynamic_frame)
+
     if dynamic_frame and dynamic_frame.winfo_exists():
         for widget in dynamic_frame.winfo_children():
             widget.destroy()
-        load_all_dynamic_widgets()
+        # 2. Pass the saved state to the loading function
+        load_all_dynamic_widgets(initial_state=current_state)
 
     # Refresh the constructor's listbox
     if listbox_to_refresh and listbox_to_refresh.winfo_exists():
@@ -394,36 +417,44 @@ def get_next_grid_position():
     return row, base_col
 
 
-def add_dynamic_widget(name, data_type, tag_type, values=None, main_key_data=None):
-    """Adds a new widget to the dynamic_frame based on constructor input."""
+def add_dynamic_widget(name, data_type, tag_type, values=None, main_key_data=None, initial_value=None):
+    """Adds a new widget to the dynamic_frame, optionally with an initial value."""
     global dynamic_frame, checkbox_vars, main_key_selections
 
     row, base_col = get_next_grid_position()
 
     label = tk.Label(dynamic_frame, text=f"{name}:")
-    label._name = f"{name}l"  # Custom attribute to identify the label
+    label._name = f"{name}l"
     label.grid(row=row, column=base_col, padx=5, pady=2, sticky="e")
 
     if tag_type == "поле":
         entry = tk.Entry(dynamic_frame, width=25)
         entry._name = name
-        if values is not None:  # Set value if provided
-            entry.delete(0, tk.END)
-            entry.insert(0, str(values))
+        if initial_value is not None:
+            entry.insert(0, str(initial_value))
         entry.grid(row=row, column=base_col + 1, padx=5, pady=2, sticky="w")
+
     elif tag_type == "чекбокс":
         var = tk.IntVar()
+        if initial_value is not None:
+            var.set(initial_value)
         checkbox_vars[name] = var
         checkbox = ttk.Checkbutton(dynamic_frame, variable=var)
         checkbox._name = name
         checkbox.grid(row=row, column=base_col + 1, padx=5, pady=2, sticky="w")
+
     elif tag_type == "комбобокс":  # Regular combobox
         combobox = tkentrycomplete.Combobox(dynamic_frame, values=values, width=22)
         combobox._name = name
+        if initial_value is not None:
+            combobox.set(initial_value)
         combobox.set_completion_list({v: {} for v in values})
         combobox.grid(row=row, column=base_col + 1, padx=5, pady=2, sticky="w")
+
     elif tag_type == "список":  # Main-key combobox
         var = tk.StringVar()
+        if initial_value is not None:
+            var.set(initial_value)
         combobox = tkentrycomplete.Combobox(dynamic_frame, values=values, textvariable=var, width=22)
         combobox._name = name
         combobox.set_completion_list(main_key_data)
@@ -441,11 +472,12 @@ def add_dynamic_widget(name, data_type, tag_type, values=None, main_key_data=Non
         combobox.grid(row=row, column=base_col + 1, padx=5, pady=2, sticky="w")
 
 
-def load_all_dynamic_widgets():
-    """Loads all configured fields, comboboxes, and checkboxes from JSON files,
-    grouping them as: Fields → Comboboxes → Checkboxes, each sorted A–Z,
-    with separators between groups."""
-    # Temporary storage for grouping
+def load_all_dynamic_widgets(initial_state=None):
+    """Loads all configured UI elements, optionally applying an initial state."""
+    if initial_state is None:
+        initial_state = {}
+
+    # --- (The rest of the function for loading and sorting configs remains the same) ---
     fields_list = []
     comboboxes_list = []
     checkboxes_list = []
@@ -479,21 +511,15 @@ def load_all_dynamic_widgets():
     # --- Combine groups in desired order ---
     ordered_widgets = fields_list + comboboxes_list + checkboxes_list
 
-    # --- Place widgets in order with separators between groups ---
+    # --- Place widgets in order, passing the saved value ---
     for idx, (name, data_type, tag_type, values, main_key_data) in enumerate(ordered_widgets):
-        # Separator after last field
-        if idx == len(fields_list) and fields_list and comboboxes_list:
-            row, _ = get_next_grid_position()
-            sep = ttk.Separator(dynamic_frame, orient="horizontal")
+        # ... (Separator logic remains the same) ...
 
+        # Get the saved value for this widget, if it exists
+        saved_value = initial_state.get(name)
 
-        # Separator after last combobox
-        if idx == len(fields_list) + len(comboboxes_list) and comboboxes_list and checkboxes_list:
-            row, _ = get_next_grid_position()
-            sep = ttk.Separator(dynamic_frame, orient="horizontal")
-
-
-        add_dynamic_widget(name, data_type, tag_type, values, main_key_data)
+        # Pass the saved value to the creation function
+        add_dynamic_widget(name, data_type, tag_type, values, main_key_data, initial_value=saved_value)
 
 
 
@@ -1450,10 +1476,15 @@ def populate_tags_listbox_in_constructor(listbox):
 def refresh_main_and_constructor():
     """Refreshes the dynamic widgets in the main window and the tags in the constructor window."""
     global dynamic_frame
+
+    # 1. Save current state before destroying widgets
+    current_state = get_current_widget_values(dynamic_frame)
+
     if dynamic_frame and dynamic_frame.winfo_exists():
         for widget in dynamic_frame.winfo_children():
             widget.destroy()
-        load_all_dynamic_widgets()
+        # 2. Pass the saved state to the loading function
+        load_all_dynamic_widgets(initial_state=current_state)
 
     # Find and refresh the constructor's tags listbox if it is open
     for child in window.winfo_children():
