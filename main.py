@@ -9,6 +9,7 @@ from mailmerge import MailMerge
 from transliterate import translit
 import tkentrycomplete
 import json
+import sys
 
 import shutil
 import openpyxl
@@ -24,13 +25,26 @@ checkbox_vars = {}
 # Global dictionary to hold selections from main-key comboboxes
 main_key_selections = {}
 
-# --- Paths to Configuration Files ---
-FIELDS_CONFIG_PATH = r'D:\document_filler\fields_config.json'
-COMBOBOX_REGULAR_PATH = r'D:\document_filler\combobox_regular.json'
-COMBOBOX_MAINKEY_PATH = r'D:\document_filler\combobox_mainkey.json'
-COMBINATION_CONFIG_PATH = r'D:\document_filler\combination_config.json'
-RULES_CONFIG_PATH = r'D:\document_filler\rules_config.json'
-ALL_TAGS_OUTPUT_PATH = r'D:\document_filler\all_tags.json'
+# Determine the base directory
+if getattr(sys, 'frozen', False):
+    # If the application is frozen (i.e., deployed with PyInstaller),
+    # use the temporary path where files are extracted.
+    BASE_DIR = sys._MEIPASS
+else:
+    # If the application is run as a regular Python script,
+    # use the directory of the script file.
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# The JSON folder is inside the base directory
+JSON_DIR = os.path.join(BASE_DIR, 'json')
+
+# Construct the full paths to each JSON file inside the 'json' folder.
+FIELDS_CONFIG_PATH = os.path.join(JSON_DIR, 'fields_config.json')
+COMBOBOX_REGULAR_PATH = os.path.join(JSON_DIR, 'combobox_regular.json')
+COMBOBOX_MAINKEY_PATH = os.path.join(JSON_DIR, 'combobox_mainkey.json')
+COMBINATION_CONFIG_PATH = os.path.join(JSON_DIR, 'combination_config.json')
+RULES_CONFIG_PATH = os.path.join(JSON_DIR, 'rules_config.json')
+ALL_TAGS_OUTPUT_PATH = os.path.join(JSON_DIR, 'all_tags.json')
 
 
 # --- Utility and Core Logic Functions ---
@@ -244,30 +258,23 @@ def submit_and_save():
         return
 
     try:
-        # Determine a unique folder name. User must create a field for this.
-        # We'll look for a common field name like 'invoice_number' or take the first field's value.
-        merge_data_for_foldername = get_common_merge_data()
-        folder_identifier = "document_set"  # Default
-
-        # Prioritize 'invoice_number' for the folder name if it exists and has a value
-        if 'invoice_number' in merge_data_for_foldername and merge_data_for_foldername['invoice_number']:
-            folder_identifier = merge_data_for_foldername['invoice_number']
-        elif merge_data_for_foldername:
-            # Fallback to the value of the first available field that isn't the today_tag
-            for key, value in merge_data_for_foldername.items():
-                if key != 'today_tag':
-                    folder_identifier = value
-                    break
-
-        source_dir = r"D:\document_filler\template"
-        output_dir = os.path.join(source_dir, str(folder_identifier).replace("/", "_").replace("\\", "_"))
-
-        if os.path.exists(output_dir):
-            if not messagebox.askyesno("Предупреждение!", "Папка с таким именем уже существует. Перезаписать?"):
-                return
+        # Determine the base directory for both dev and PyInstaller environments
+        if getattr(sys, 'frozen', False):
+            # PyInstaller
+            BASE_DIR = sys._MEIPASS
         else:
-            os.makedirs(output_dir, exist_ok=True)
+            # Regular Python script
+            BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
+        # Define the source and output directories relative to the base
+        source_dir = os.path.join(BASE_DIR, 'documents', 'template')
+        output_dir = os.path.join(BASE_DIR, 'documents', 'processed')
+
+        # Ensure the output directory exists
+        if not os.path.exists(output_dir):
+            os.makedirs(output_dir)
+
+        # Get common data for merging
         common_data = get_common_merge_data()
 
         # Load and apply rules
@@ -279,7 +286,7 @@ def submit_and_save():
             conditions = rule.get('conditions', [])
             behaviors = rule.get('behaviors', [])
 
-            if not conditions:  # Apply all behaviors if no conditions
+            if not conditions:
                 common_data = apply_behaviors(behaviors, common_data)
                 continue
 
@@ -290,22 +297,34 @@ def submit_and_save():
                 if non_cleaner_behaviors:
                     common_data = apply_behaviors(non_cleaner_behaviors, common_data)
             else:
-                cleaner_behavior = next((b for b in behaviors if b.get('condition') == 'очистить при не выполнении'),
-                                        None)
+                cleaner_behavior = next((b for b in behaviors if b.get('condition') == 'очистить при не выполнении'), None)
                 if cleaner_behavior:
                     common_data = apply_behaviors([cleaner_behavior], common_data)
+
+        # Get the current timestamp for file naming
+        timestamp = datetime.now().strftime("%m%d%H%M%S")
 
         # Process DOCX files
         docx_files = [f for f in os.listdir(source_dir) if f.endswith('.docx')]
         for docx_file in docx_files:
             try:
+                # Create the new filename with timestamp
+                file_name_without_ext, _ = os.path.splitext(docx_file)
+                new_file_name = f"{file_name_without_ext}_{timestamp}.docx"
+                output_path = os.path.join(output_dir, new_file_name)
+
+                # Check if file exists and ask for confirmation to overwrite
+                if os.path.exists(output_path):
+                    if not messagebox.askyesno("Перезапись файла",
+                                               f"Файл '{new_file_name}' уже существует. Хотите перезаписать?"):
+                        continue  # Skip to the next file if user says no
+
                 document = MailMerge(os.path.join(source_dir, docx_file))
-                # Get only fields that exist in the document to avoid MailMerge errors
                 merge_fields_in_doc = document.get_merge_fields()
-                filtered_data = {key: common_data[key] for key in merge_fields_in_doc if key in common_data}
+                filtered_data = {key: common_data.get(key, '') for key in merge_fields_in_doc}
 
                 document.merge(**filtered_data)
-                document.write(os.path.join(output_dir, f"{folder_identifier}_{docx_file}"))
+                document.write(output_path)
                 document.close()
             except Exception as e:
                 print(f"Error processing {docx_file}: {e}")
@@ -314,17 +333,28 @@ def submit_and_save():
         xls_files = [f for f in os.listdir(source_dir) if f.endswith(('.xls', '.xlsx'))]
         for xls_file in xls_files:
             try:
+                # Create the new filename with timestamp
+                file_name_without_ext, _ = os.path.splitext(xls_file)
+                new_file_name = f"{file_name_without_ext}_{timestamp}.xlsx"
+                output_path = os.path.join(output_dir, new_file_name)
+
+                # Check if file exists and ask for confirmation to overwrite
+                if os.path.exists(output_path):
+                    if not messagebox.askyesno("Перезапись файла",
+                                               f"Файл '{new_file_name}' уже существует. Хотите перезаписать?"):
+                        continue  # Skip to the next file if user says no
+
                 wb = openpyxl.load_workbook(os.path.join(source_dir, xls_file))
                 sheet = wb.active
                 for row in sheet.iter_rows():
                     for cell in row:
                         if cell.value and str(cell.value) in common_data:
                             cell.value = common_data[str(cell.value)]
-                wb.save(os.path.join(output_dir, f"{folder_identifier}_{xls_file}"))
+                wb.save(output_path)
             except Exception as e:
                 print(f"Error processing {xls_file}: {e}")
 
-        messagebox.showinfo(title="Успех!", message=f"Набор документов '{folder_identifier}' был успешно сформирован.")
+        messagebox.showinfo(title="Успех!", message=f"Документы были успешно сформированы.")
 
     except Exception as e:
         messagebox.showerror(title="Ошибка!", message=f"Произошла ошибка при формировании документов: {e}")
@@ -332,14 +362,25 @@ def submit_and_save():
 
 def import_fields():
     global dynamic_frame
+
     # Prompt user for confirmation
     if not messagebox.askyesno("Подтверждение", "Вы уверены, что хотите импортировать поля из файла 'field_import'?"):
         return
 
-    # Define file paths
-    xlsx_path = r"D:\document_filler\field_import.xlsx"
-    xls_path = r"D:\document_filler\field_import.xls"
-    file_path = None
+    # Determine the base directory
+    if getattr(sys, 'frozen', False):
+        # PyInstaller
+        BASE_DIR = sys._MEIPASS
+    else:
+        # Regular Python script
+        BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+    # Define the folder for your import files
+    IMPORT_FLD = os.path.join(BASE_DIR, 'import_fld')
+
+    # Define file paths relative to the import folder
+    xlsx_path = os.path.join(IMPORT_FLD, "field_import.xlsx")
+    xls_path = os.path.join(IMPORT_FLD, "field_import.xls")
 
     # Check for file existence, prioritizing .xlsx
     if os.path.exists(xlsx_path):
@@ -1135,7 +1176,19 @@ def open_list_window(listbox, item_to_edit, parent_window):
         list_window.destroy()
 
     def import_from_excel():
-        import_path = r"D:\document_filler\import.xlsx"
+        # Determine the base directory
+        if getattr(sys, 'frozen', False):
+            # PyInstaller
+            BASE_DIR = sys._MEIPASS
+        else:
+            # Regular Python script
+            BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+        # Define the folder for your import files
+        IMPORT_FLD = os.path.join(BASE_DIR, 'import_fld')
+
+        # Define the file path relative to the import folder
+        import_path = os.path.join(IMPORT_FLD, "import.xlsx")
         if not os.path.exists(import_path):
             messagebox.showwarning("Ошибка", f"Файл {import_path} не найден", parent=list_window)
             return
@@ -2273,18 +2326,32 @@ def delete_rule(listbox, parent_window, rules_file=RULES_CONFIG_PATH):
         messagebox.showerror("Ошибка", f"Не удалось сохранить изменения: {str(e)}", parent=parent_window)
 
 
-# --- Main Application Window Setup ---
-window = Tk()
+# --- Main Window Creation ---
+# Create a single Tkinter window instance
+window = tk.Tk()
 window.title("Document Filler v2.1")
-# The window will now resize itself dynamically
-# window.geometry("700x600")
+window.resizable(False, False)
 
 # Set application icon
+# Determine the base directory
+if getattr(sys, 'frozen', False):
+    # PyInstaller
+    BASE_DIR = sys._MEIPASS
+else:
+    # Regular Python script
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# Define the folder for the icon
+ICON_DIR = os.path.join(BASE_DIR, 'icon')
+
+# Construct the full path to the icon file (assuming it's named bee.ico)
+icon_path = os.path.join(ICON_DIR, "bee.ico")
+
 try:
-    icon = PhotoImage(file=r"D:\document_filler\bee.png")
-    window.iconphoto(True, icon)
+    window.iconbitmap(icon_path)
 except tk.TclError:
     print("Warning: Icon file not found or invalid format.")
+
 window.resizable(False, False)
 
 # Main layout frames
