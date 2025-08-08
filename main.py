@@ -839,52 +839,131 @@ def open_list_window(listbox, item_to_edit, parent_window):
                 tk.Button(simple_frame, text="Импорт из Excel", command=import_from_excel).pack(pady=5)
             sets_list[0]['widget_ref'] = text_area
 
+
+
         else:
-            # --- Main key mode with selector ---
-            selector_frame = tk.Frame(table_frame)
-            selector_frame.pack(fill="x", padx=10, pady=5)
 
-            tk.Label(selector_frame, text="Выберите главный ключ:", anchor="w").pack(side="left")
-            main_keys_list = [s["main_key"].get() for s in sets_list if s["main_key"].get().strip()]
-            selected_main_key = tk.StringVar()
-            main_key_combo = ttk.Combobox(selector_frame, values=main_keys_list,
-                                          textvariable=selected_main_key, state="readonly", width=25)
-            main_key_combo.pack(side="left", padx=5)
+            if is_edit:
 
-            subkeys_frame = tk.Frame(table_frame)
-            subkeys_frame.pack(fill="x", padx=10, pady=5)
+                # --- Main key edit mode with selector ---
 
-            def show_subkeys_for_selected(*args):
-                for w in subkeys_frame.winfo_children():
-                    w.destroy()
-                key = selected_main_key.get()
-                set_index = next((i for i, s in enumerate(sets_list) if s["main_key"].get() == key), None)
-                if set_index is None:
-                    return
-                s = sets_list[set_index]
-                tk.Label(subkeys_frame, text=f"Главный ключ:", anchor="w").grid(row=0, column=0, sticky="w", pady=2)
-                tk.Entry(subkeys_frame, textvariable=s["main_key"], width=20).grid(row=0, column=1, sticky="w", padx=5)
-                for i, kv in enumerate(s["key_values"], start=1):
-                    tk.Label(subkeys_frame, text=f"Ключ {i}:", anchor="w").grid(row=i, column=0, sticky="w", pady=2)
-                    tk.Entry(subkeys_frame, textvariable=kv["key"], width=20).grid(row=i, column=1, sticky="w", padx=5)
-                    tk.Label(subkeys_frame, text="Значение:", anchor="w").grid(row=i, column=2, sticky="w", padx=5)
-                    tk.Entry(subkeys_frame, textvariable=kv["value"], width=20).grid(row=i, column=3, sticky="w", padx=5)
-                tk.Button(subkeys_frame, text="Добавить строку",
-                          command=lambda: add_key_value_to_specific_set(set_index)).grid(
-                    row=len(s["key_values"]) + 1, column=0, pady=5)
+                selector_frame = tk.Frame(table_frame)
 
-            main_key_combo.bind("<<ComboboxSelected>>", show_subkeys_for_selected)
-            if main_keys_list:
-                selected_main_key.set(main_keys_list[0])
-                show_subkeys_for_selected()
+                selector_frame.pack(fill="x", padx=10, pady=5)
 
-            control_frame = tk.Frame(table_frame)
-            control_frame.pack(pady=10)
-            tk.Button(control_frame, text="Добавить главный ключ", command=add_set).pack(side=LEFT, padx=5)
-            if not is_edit:
-                tk.Button(control_frame, text="Импорт", command=import_from_excel).pack(side=LEFT, padx=5)
+                tk.Label(selector_frame, text="Выберите главный ключ:", anchor="w").pack(side="left")
 
-        list_window.update_idletasks()
+                main_keys_list = [s["main_key"].get() for s in sets_list if s["main_key"].get().strip()]
+
+                selected_main_key = tk.StringVar()
+
+                main_key_combo = ttk.Combobox(selector_frame, values=main_keys_list,
+
+                                              textvariable=selected_main_key, state="readonly", width=25)
+
+                main_key_combo.pack(side="left", padx=5)
+
+                subkeys_frame = tk.Frame(table_frame)
+
+                subkeys_frame.pack(fill="x", padx=10, pady=5)
+
+                def show_subkeys_for_selected(*args):
+
+                    for w in subkeys_frame.winfo_children():
+                        w.destroy()
+
+                    key = selected_main_key.get()
+
+                    set_index = next((i for i, s in enumerate(sets_list) if s["main_key"].get() == key), None)
+
+                    if set_index is None:
+                        return
+
+                    s = sets_list[set_index]
+
+                    tk.Label(subkeys_frame, text=f"Главный ключ:", anchor="w").grid(row=0, column=0, sticky="w", pady=2)
+
+                    tk.Entry(subkeys_frame, textvariable=s["main_key"], width=20).grid(row=0, column=1, sticky="w",
+                                                                                       padx=5)
+
+                    for i, kv in enumerate(s["key_values"], start=1):
+                        tk.Label(subkeys_frame, text=f"Ключ {i}:", anchor="w").grid(row=i, column=0, sticky="w", pady=2)
+
+                        tk.Entry(subkeys_frame, textvariable=kv["key"], width=20).grid(row=i, column=1, sticky="w",
+                                                                                       padx=5)
+
+                        tk.Label(subkeys_frame, text="Значение:", anchor="w").grid(row=i, column=2, sticky="w", padx=5)
+
+                        tk.Entry(subkeys_frame, textvariable=kv["value"], width=20).grid(row=i, column=3, sticky="w",
+                                                                                         padx=5)
+
+                    tk.Button(subkeys_frame, text="Добавить строку",
+
+                              command=lambda: add_key_value_to_specific_set(set_index)).grid(
+
+                        row=len(s["key_values"]) + 1, column=0, pady=5)
+
+                main_key_combo.bind("<<ComboboxSelected>>", show_subkeys_for_selected)
+
+                if main_keys_list:
+                    selected_main_key.set(main_keys_list[0])
+
+                    show_subkeys_for_selected()
+
+                control_frame = tk.Frame(table_frame)
+
+                control_frame.pack(pady=10)
+
+                tk.Button(control_frame, text="Добавить главный ключ", command=add_set).pack(side=LEFT, padx=5)
+
+
+            else:
+
+                # --- Main key creation mode ---
+
+                for set_index, s in enumerate(sets_list):
+
+                    set_frame = ttk.LabelFrame(table_frame, text=f"Набор {set_index + 1}")
+
+                    set_frame.pack(fill="x", expand=True, padx=5, pady=5)
+
+                    keys_frame = tk.Frame(set_frame)
+
+                    keys_frame.pack(fill="x", padx=10, pady=2)
+
+                    tk.Label(keys_frame, text="Главный ключ:", anchor="w").grid(row=0, column=0, sticky="w", pady=2)
+
+                    tk.Entry(keys_frame, textvariable=s["main_key"], width=25).grid(row=0, column=1, sticky="w", padx=5)
+
+                    for i, kv in enumerate(s["key_values"]):
+                        row_num = i + 1
+
+                        tk.Label(keys_frame, text=f"Ключ {row_num}:", anchor="w").grid(row=row_num, column=0,
+                                                                                       sticky="w", pady=2)
+
+                        tk.Entry(keys_frame, textvariable=kv["key"], width=20).grid(row=row_num, column=1, sticky="w",
+                                                                                    padx=5)
+
+                        tk.Label(keys_frame, text="Значение:", anchor="w").grid(row=row_num, column=2, sticky="w",
+                                                                                padx=5)
+
+                        tk.Entry(keys_frame, textvariable=kv["value"], width=20).grid(row=row_num, column=3, sticky="w",
+                                                                                      padx=5)
+
+                    tk.Button(set_frame, text="Добавить строку в этот набор",
+
+                              command=lambda si=set_index: add_key_value_to_specific_set(si)).pack(pady=5)
+
+                control_frame = tk.Frame(table_frame)
+
+                control_frame.pack(pady=10)
+
+                tk.Button(control_frame, text="Строка", command=add_key_value_row).pack(side=LEFT, padx=5)
+
+                tk.Button(control_frame, text="Добавить", command=add_set).pack(side=LEFT, padx=5)
+
+                if not is_edit:
+                    tk.Button(control_frame, text="Импорт", command=import_from_excel).pack(side=LEFT, padx=5)
 
     def save_combobox():
         name = name_var.get().strip()
