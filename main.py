@@ -10,10 +10,10 @@ from transliterate import translit
 import tkentrycomplete
 import json
 import sys
-
+from datetime import datetime, timedelta, date
 import shutil
 import openpyxl
-from datetime import datetime, timedelta
+from openpyxl.styles import numbers
 from decimal import Decimal
 import uuid
 
@@ -258,6 +258,47 @@ def get_common_merge_data():
 
     return merge_data
 
+def guess_type(value: str):
+    """Try to guess if the string should be int, float, date, or text."""
+
+    val = str(value).strip()
+
+    # Try integer (only digits)
+    if val.isdigit():
+        try:
+            return int(val)
+        except ValueError:
+            pass
+
+    # Try float (handle decimal commas and points)
+    try:
+        if "." in val or "," in val:
+            # Replace comma with dot for float conversion
+            val_float = val.replace(",", ".")
+            return float(val_float)
+    except ValueError:
+        pass
+
+    # Try date with common formats
+    date_formats = [
+        "%Y-%m-%d",   # 2023-08-10
+        "%d.%m.%Y",   # 10.08.2023
+        "%d/%m/%Y",   # 10/08/2023
+        "%m/%d/%Y",   # 08/10/2023
+        "%d-%m-%Y",   # 10-08-2023
+        "%Y/%m/%d",   # 2023/08/10
+        # add more if needed
+    ]
+
+    for fmt in date_formats:
+        try:
+            dt = datetime.strptime(val, fmt)
+            return dt.date()  # or dt if you want datetime
+        except ValueError:
+            continue
+
+    # If all else fails, return original string
+    return val
 
 def submit_and_save():
     """Main function to generate documents after validation."""
@@ -265,31 +306,31 @@ def submit_and_save():
 
     # Check if any fields have been created
     if not dynamic_frame or not dynamic_frame.winfo_children():
-        messagebox.showinfo("Информация",
-                            "Пожалуйста, создайте хотя бы одно поле в Конструкторе перед формированием документов.")
+        messagebox.showinfo(
+            "Информация",
+            "Пожалуйста, создайте хотя бы одно поле в Конструкторе перед формированием документов."
+        )
         return
 
     try:
         # Determine the base directory for both dev and PyInstaller environments
         if getattr(sys, 'frozen', False):
-            # PyInstaller
             BASE_DIR = sys._MEIPASS
         else:
-            # Regular Python script
             BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-        # Define the source and output directories relative to the base
+        # Define source and output directories
         source_dir = os.path.join(BASE_DIR, 'documents', 'template')
         output_dir = os.path.join(BASE_DIR, 'documents', 'processed')
 
-        # Ensure the output directory exists
+        # Ensure output directory exists
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
 
-        # Get common data for merging
+        # Get merge data
         common_data = get_common_merge_data()
 
-        # Load and apply rules
+        # Apply rules
         rules = load_json(RULES_CONFIG_PATH, 'rules_config')
         if not isinstance(rules, list):
             rules = []
@@ -305,31 +346,35 @@ def submit_and_save():
             all_conditions_met = all(evaluate_condition(cond, common_data) for cond in conditions)
 
             if all_conditions_met:
-                non_cleaner_behaviors = [b for b in behaviors if b.get('condition') != 'очистить при не выполнении']
+                non_cleaner_behaviors = [
+                    b for b in behaviors if b.get('condition') != 'очистить при не выполнении'
+                ]
                 if non_cleaner_behaviors:
                     common_data = apply_behaviors(non_cleaner_behaviors, common_data)
             else:
-                cleaner_behavior = next((b for b in behaviors if b.get('condition') == 'очистить при не выполнении'), None)
+                cleaner_behavior = next(
+                    (b for b in behaviors if b.get('condition') == 'очистить при не выполнении'), None
+                )
                 if cleaner_behavior:
                     common_data = apply_behaviors([cleaner_behavior], common_data)
 
-        # Get the current timestamp for file naming
+        # Timestamp for output filenames
         timestamp = datetime.now().strftime("%m%d%H%M%S")
 
         # Process DOCX files
         docx_files = [f for f in os.listdir(source_dir) if f.endswith('.docx')]
         for docx_file in docx_files:
             try:
-                # Create the new filename with timestamp
                 file_name_without_ext, _ = os.path.splitext(docx_file)
                 new_file_name = f"{file_name_without_ext}_{timestamp}.docx"
                 output_path = os.path.join(output_dir, new_file_name)
 
-                # Check if file exists and ask for confirmation to overwrite
                 if os.path.exists(output_path):
-                    if not messagebox.askyesno("Перезапись файла",
-                                               f"Файл '{new_file_name}' уже существует. Хотите перезаписать?"):
-                        continue  # Skip to the next file if user says no
+                    if not messagebox.askyesno(
+                        "Перезапись файла",
+                        f"Файл '{new_file_name}' уже существует. Хотите перезаписать?"
+                    ):
+                        continue
 
                 document = MailMerge(os.path.join(source_dir, docx_file))
                 merge_fields_in_doc = document.get_merge_fields()
@@ -341,35 +386,52 @@ def submit_and_save():
             except Exception as e:
                 print(f"Error processing {docx_file}: {e}")
 
-        # Process XLSX files
+        # Process XLS/XLSX files
         xls_files = [f for f in os.listdir(source_dir) if f.endswith(('.xls', '.xlsx'))]
         for xls_file in xls_files:
             try:
-                # Create the new filename with timestamp
                 file_name_without_ext, _ = os.path.splitext(xls_file)
                 new_file_name = f"{file_name_without_ext}_{timestamp}.xlsx"
                 output_path = os.path.join(output_dir, new_file_name)
 
-                # Check if file exists and ask for confirmation to overwrite
                 if os.path.exists(output_path):
-                    if not messagebox.askyesno("Перезапись файла",
-                                               f"Файл '{new_file_name}' уже существует. Хотите перезаписать?"):
-                        continue  # Skip to the next file if user says no
+                    if not messagebox.askyesno(
+                        "Перезапись файла",
+                        f"Файл '{new_file_name}' уже существует. Хотите перезаписать?"
+                    ):
+                        continue
 
                 wb = openpyxl.load_workbook(os.path.join(source_dir, xls_file))
                 sheet = wb.active
+
                 for row in sheet.iter_rows():
                     for cell in row:
                         if cell.value and str(cell.value) in common_data:
-                            cell.value = common_data[str(cell.value)]
+                            new_val = guess_type(common_data[str(cell.value)])
+
+                            # Assign type & number format
+                            if isinstance(new_val, (int, float)):
+                                cell.value = new_val
+                                cell.number_format = numbers.FORMAT_GENERAL
+                            elif isinstance(new_val, date):
+                                cell.value = new_val
+                                cell.number_format = 'DD.MM.YYYY'
+                            else:
+                                cell.value = str(new_val)
+                                cell.number_format = numbers.FORMAT_GENERAL
+
                 wb.save(output_path)
+
             except Exception as e:
                 print(f"Error processing {xls_file}: {e}")
 
-        messagebox.showinfo(title="Успех!", message=f"Документы были успешно сформированы.")
+        messagebox.showinfo(title="Успех!", message="Документы были успешно сформированы.")
 
     except Exception as e:
-        messagebox.showerror(title="Ошибка!", message=f"Произошла ошибка при формировании документов: {e}")
+        messagebox.showerror(
+            title="Ошибка!",
+            message=f"Произошла ошибка при формировании документов: {e}"
+        )
 
 
 def import_fields():
@@ -1773,13 +1835,13 @@ def apply_behaviors(behaviors, merge_data):
             elif action == "добавить текст в конце":
                 merge_data[tag] = str(value) + rule
             elif action == "добавить дату":
-                date = datetime.strptime(value, '%d.%m.%Y')
+                date_obg = datetime.strptime(value, '%d.%m.%Y')
                 days = int(rule)
-                merge_data[tag] = (date + timedelta(days=days)).strftime('%d.%m.%Y')
+                merge_data[tag] = (date_obg + timedelta(days=days)).strftime('%d.%m.%Y')
             elif action == "отнять дату":
-                date = datetime.strptime(value, '%d.%m.%Y')
+                date_obg = datetime.strptime(value, '%d.%m.%Y')
                 days = int(rule)
-                merge_data[tag] = (date - timedelta(days=days)).strftime('%d.%m.%Y')
+                merge_data[tag] = (date_obg - timedelta(days=days)).strftime('%d.%m.%Y')
             elif action == "обрезать":
                 if ':' not in rule:
                     raise ValueError("Rule must be in 'start:end' format")
