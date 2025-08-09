@@ -1,1 +1,21 @@
-[]
+[
+    {
+        "name": "regular_combo",
+        "type": "текст",
+        "tag_type": "комбобокс",
+        "values": [
+            "black",
+            "black",
+            "brisk",
+            "brisk",
+            "brown",
+            "brown",
+            "fancy",
+            "fancy",
+            "flat",
+            "flat",
+            "volumous",
+            "volumous"
+        ]
+    }
+]

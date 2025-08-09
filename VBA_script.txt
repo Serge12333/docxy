@@ -1,0 +1,30 @@
+Sub ConvertToMailMergeTags()
+    Dim inputText As String
+    Dim fieldNames As Variant
+    Dim mailMergeTags As String
+    Dim i As Integer
+    
+    ' Your input text
+    inputText = "test_f, test_l, test_c, test_ch, test_com, test_key1, test_key2"
+    
+    ' Split the text by comma and space
+    fieldNames = Split(inputText, ", ")
+    
+    ' Insert actual mail merge fields
+    For i = 0 To UBound(fieldNames)
+        ' Trim any extra spaces
+        Dim fieldName As String
+        fieldName = Trim(fieldNames(i))
+        
+        ' Insert actual mail merge field
+        Selection.Fields.Add Range:=Selection.Range, Type:=wdFieldMergeField, Text:=fieldName
+        
+        ' Add comma and space if not the last field
+        If i < UBound(fieldNames) Then
+            Selection.TypeText ", "
+        End If
+    Next i
+    
+    ' Optional: Display completion message
+    MsgBox "Mail merge fields inserted successfully!"
+End Sub

@@ -1,1 +1,37 @@
-[]
+[
+    {
+        "name": "combo_main",
+        "type": "текст",
+        "tag_type": "список",
+        "main_keys": [
+            {
+                "bmw": {
+                    "color": "black",
+                    "body": "flat",
+                    "wing": "brisk"
+                }
+            },
+            {
+                "audi": {
+                    "color": "brown",
+                    "body": "volumous",
+                    "wing": "fancy"
+                }
+            },
+            {
+                "merecedes": {
+                    "color": "brown",
+                    "body": "volumous",
+                    "wing": "fancy"
+                }
+            },
+            {
+                "volswagen": {
+                    "color": "black",
+                    "body": "flat",
+                    "wing": "brisk"
+                }
+            }
+        ]
+    }
+]

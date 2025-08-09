@@ -213,6 +213,18 @@ def get_common_merge_data():
 
     # Add the only hardcoded tag value
     merge_data['today_tag'] = datetime.now().strftime('%d.%m.%Y')
+    try:
+        all_tags_from_file = load_json(ALL_TAGS_OUTPUT_PATH, 'all_tags.json')
+        if isinstance(all_tags_from_file, list):
+            # Filter out any potential non-string items and join them
+            string_tags = [str(tag) for tag in all_tags_from_file]
+            merge_data['all_tags_merge'] = ', '.join(string_tags)
+        else:
+            # Failsafe in case the JSON is not a list
+            merge_data['all_tags_merge'] = ''
+    except Exception as e:
+        print(f"Could not create 'all_tags_merge' due to an error: {e}")
+        merge_data['all_tags_merge'] = ''
 
     # Collect data from dynamically created widgets
     if dynamic_frame:
@@ -981,9 +993,20 @@ def open_list_window(listbox, item_to_edit, parent_window):
             refresh_table()
 
     def add_set():
-        key_structure = [kv['key'].get() for kv in sets_list[0]['key_values']] if sets_list else []
+        # Get subkey names from the first set (ignores values, just keeps keys)
+        if sets_list:
+            key_structure = [kv['key'].get() for kv in sets_list[0]['key_values']]
+        else:
+            key_structure = []
+
+        # Create new key-value dicts: same keys, empty values
         new_key_values = [{"key": tk.StringVar(value=k), "value": tk.StringVar()} for k in key_structure]
-        sets_list.append({"main_key": tk.StringVar(), "key_values": new_key_values})
+
+        sets_list.append({
+            "main_key": tk.StringVar(),
+            "key_values": new_key_values
+        })
+
         refresh_table()
 
     def refresh_table():
@@ -2329,30 +2352,35 @@ def delete_rule(listbox, parent_window, rules_file=RULES_CONFIG_PATH):
 # --- Main Window Creation ---
 # Create a single Tkinter window instance
 window = tk.Tk()
-window.title("Document Filler v2.1")
+window.title("Doxy v2.1")
 window.resizable(False, False)
 
-# Set application icon
 # Determine the base directory
 if getattr(sys, 'frozen', False):
-    # PyInstaller
     BASE_DIR = sys._MEIPASS
 else:
-    # Regular Python script
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-# Define the folder for the icon
+# Path to icon
 ICON_DIR = os.path.join(BASE_DIR, 'icon')
+ICON_PATH = os.path.join(ICON_DIR, "bee.ico")
 
-# Construct the full path to the icon file (assuming it's named bee.ico)
-icon_path = os.path.join(ICON_DIR, "bee.ico")
-
+# Set main window icon
 try:
-    window.iconbitmap(icon_path)
+    window.iconbitmap(ICON_PATH)
 except tk.TclError:
     print("Warning: Icon file not found or invalid format.")
 
-window.resizable(False, False)
+# Apply icon automatically to all Toplevel windows
+_original_toplevel_init = tk.Toplevel.__init__
+def _custom_toplevel_init(self, *args, **kwargs):
+    _original_toplevel_init(self, *args, **kwargs)
+    try:
+        self.iconbitmap(ICON_PATH)
+    except tk.TclError:
+        pass
+
+tk.Toplevel.__init__ = _custom_toplevel_init
 
 # Main layout frames
 # This frame will hold the dynamic widgets and expand with them

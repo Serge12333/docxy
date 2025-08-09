@@ -1,1 +1,16 @@
-[]
+[
+    {
+        "name": "combination",
+        "type": "текст",
+        "tag_type": "сочетание",
+        "tags": [
+            "animal",
+            " ",
+            "today_tag",
+            "is good",
+            "color",
+            " ",
+            "is bad"
+        ]
+    }
+]
