@@ -1551,7 +1551,10 @@ def open_edit_tag_window(listbox, parent_window):
 
 
 def delete_tag(tags_listbox, parent_window):
-    """Deletes one or more selected tags and refreshes the display."""
+    """
+    Deletes one or more selected tags and performs a cascading delete
+    of their subkeys from rules and combinations.
+    """
     selected_items = tags_listbox.selection()
     if not selected_items:
         messagebox.showwarning("Предупреждение", "Пожалуйста, выберите тег(и) для удаления.", parent=parent_window)
@@ -1565,14 +1568,53 @@ def delete_tag(tags_listbox, parent_window):
         tag_type = item_values[2]
         tags_to_delete.append({'name': tag_name, 'type': tag_type})
 
-    # Format a user-friendly confirmation message
+    # Format a user-friendly confirmation message, now with a warning
     names_str = "\n- ".join([t['name'] for t in tags_to_delete])
-    if not messagebox.askyesno("Подтверждение", f"Вы уверены, что хотите удалить следующие теги?\n\n- {names_str}",
+    if not messagebox.askyesno("Подтверждение", f"Вы уверены, что хотите удалить следующие теги?\n\n- {names_str}\n\n"
+                                               "ВНИМАНИЕ: Все дочерние теги (для списков) будут также удалены из всех правил и сочетаний.",
                                parent=parent_window):
         return
 
     try:
-        # Group deletions by configuration file to avoid reading/writing the same file multiple times
+        # --- START: New Cascading Delete Logic ---
+
+        # 1. Find all subkeys from any 'список' type tags being deleted.
+        subkeys_to_purge = set()
+        list_tags_to_delete = [tag['name'] for tag in tags_to_delete if tag['type'] == 'список']
+
+        if list_tags_to_delete:
+            mainkey_config = load_json(COMBOBOX_MAINKEY_PATH, 'combobox_mainkey')
+            for combo in mainkey_config:
+                if combo.get('name') in list_tags_to_delete:
+                    for mk_dict in combo.get('main_keys', []):
+                        # mk_dict is like: {"Main Key 1": {"subkey1": "val1", "subkey2": "val2"}}
+                        if mk_dict and isinstance(list(mk_dict.values())[0], dict):
+                            subkeys_dict = list(mk_dict.values())[0]
+                            for subkey_name in subkeys_dict.keys():
+                                subkeys_to_purge.add(subkey_name)
+
+        # 2. If we found any subkeys, clean them up from other configs.
+        if subkeys_to_purge:
+            # 2a. Clean up Combination Config
+            combination_config = load_json(COMBINATION_CONFIG_PATH, 'combination_config')
+            for combo in combination_config:
+                # Filter the 'tags' list, keeping only tags not in the purge set
+                combo['tags'] = [tag for tag in combo.get('tags', []) if tag not in subkeys_to_purge]
+            save_json(COMBINATION_CONFIG_PATH, combination_config)
+
+            # 2b. Clean up Rules Config
+            rules_config = load_json(RULES_CONFIG_PATH, 'rules_config')
+            for rule in rules_config:
+                # Filter 'conditions' by removing any that use a purged subkey
+                rule['conditions'] = [cond for cond in rule.get('conditions', []) if cond.get('tag') not in subkeys_to_purge]
+                # Filter 'behaviors' similarly
+                rule['behaviors'] = [beh for beh in rule.get('behaviors', []) if beh.get('tag') not in subkeys_to_purge]
+            save_json(RULES_CONFIG_PATH, rules_config)
+
+        # --- END: New Cascading Delete Logic ---
+
+
+        # --- Original Deletion Logic (for the main tags themselves) ---
         deletions_by_file = {
             FIELDS_CONFIG_PATH: set(),
             COMBOBOX_REGULAR_PATH: set(),
@@ -1603,7 +1645,7 @@ def delete_tag(tags_listbox, parent_window):
 
         # Refresh the UI once after all deletions are complete
         refresh_all_windows(tags_listbox)
-        messagebox.showinfo("Успех", "Выбранные теги были успешно удалены.", parent=parent_window)
+        messagebox.showinfo("Успех", "Выбранные теги и все их дочерние элементы были успешно удалены.", parent=parent_window)
 
     except Exception as e:
         messagebox.showerror("Ошибка", f"Произошла ошибка при удалении тегов: {e}", parent=parent_window)

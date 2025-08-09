@@ -1,21 +1,12 @@
 [
     {
-        "name": "regular_combo",
+        "name": "regular",
         "type": "текст",
         "tag_type": "комбобокс",
         "values": [
-            "black",
-            "black",
-            "brisk",
-            "brisk",
-            "brown",
-            "brown",
-            "fancy",
-            "fancy",
-            "flat",
-            "flat",
-            "volumous",
-            "volumous"
+            "asdasd",
+            "asdasd",
+            "asdasd"
         ]
     }
 ]

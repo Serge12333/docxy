@@ -8,45 +8,5 @@
         "name": "checky",
         "type": "чекбокс",
         "tag_type": "чекбокс"
-    },
-    {
-        "name": "test_filed_2",
-        "type": "текст",
-        "tag_type": "поле"
-    },
-    {
-        "name": "test_field1",
-        "type": "текст",
-        "tag_type": "поле"
-    },
-    {
-        "name": "test_field2",
-        "type": "текст",
-        "tag_type": "поле"
-    },
-    {
-        "name": "test_field3",
-        "type": "текст",
-        "tag_type": "поле"
-    },
-    {
-        "name": "test_field4",
-        "type": "текст",
-        "tag_type": "поле"
-    },
-    {
-        "name": "test_field5",
-        "type": "текст",
-        "tag_type": "поле"
-    },
-    {
-        "name": "test_field6",
-        "type": "текст",
-        "tag_type": "поле"
-    },
-    {
-        "name": "test_field7",
-        "type": "текст",
-        "tag_type": "поле"
     }
 ]

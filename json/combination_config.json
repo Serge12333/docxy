@@ -4,13 +4,12 @@
         "type": "текст",
         "tag_type": "сочетание",
         "tags": [
-            "animal",
+            "is cool",
             " ",
-            "today_tag",
-            "is good",
-            "color",
+            "field",
+            "\n",
             " ",
-            "is bad"
+            "today_tag"
         ]
     }
 ]

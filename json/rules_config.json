@@ -1,1 +1,29 @@
-[]
+[
+    {
+        "name": "new_rule",
+        "conditions": [
+            {
+                "tag": "field",
+                "condition": "содержит",
+                "rule": "s"
+            },
+            {
+                "tag": "checky",
+                "condition": "True",
+                "rule": ""
+            }
+        ],
+        "behaviors": [
+            {
+                "tag": "combination",
+                "condition": "CAPS",
+                "rule": ""
+            },
+            {
+                "tag": "combination",
+                "condition": "добавить текст в конце",
+                "rule": " added_text"
+            }
+        ]
+    }
+]
