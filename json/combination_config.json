@@ -1,15 +1,8 @@
 [
     {
-        "name": "combination",
+        "name": "new_combi",
         "type": "текст",
         "tag_type": "сочетание",
-        "tags": [
-            "is cool",
-            " ",
-            "field",
-            "\n",
-            " ",
-            "today_tag"
-        ]
+        "tags": []
     }
 ]

@@ -1633,14 +1633,17 @@ def delete_tag(tags_listbox, parent_window):
     # Format a user-friendly confirmation message, now with a warning
     names_str = "\n- ".join([t['name'] for t in tags_to_delete])
     if not messagebox.askyesno("Подтверждение", f"Вы уверены, что хотите удалить следующие теги?\n\n- {names_str}\n\n"
-                                               "ВНИМАНИЕ: Все дочерние теги (для списков) будут также удалены из всех правил и сочетаний.",
+                                               "ВНИМАНИЕ: Все выбранные теги и их дочерние элементы (для списков) будут также удалены из всех правил и сочетаний.",
                                parent=parent_window):
         return
 
     try:
         # --- START: New Cascading Delete Logic ---
 
-        # 1. Find all subkeys from any 'список' type tags being deleted.
+        # 1. Collect all top-level tags to purge
+        tags_to_purge = set(tag['name'] for tag in tags_to_delete)
+
+        # 2. Find all subkeys from any 'список' type tags being deleted.
         subkeys_to_purge = set()
         list_tags_to_delete = [tag['name'] for tag in tags_to_delete if tag['type'] == 'список']
 
@@ -1655,22 +1658,25 @@ def delete_tag(tags_listbox, parent_window):
                             for subkey_name in subkeys_dict.keys():
                                 subkeys_to_purge.add(subkey_name)
 
-        # 2. If we found any subkeys, clean them up from other configs.
-        if subkeys_to_purge:
-            # 2a. Clean up Combination Config
+        # 3. Add subkeys to the purge set
+        tags_to_purge.update(subkeys_to_purge)
+
+        # 4. If we have tags to purge, clean them up from other configs.
+        if tags_to_purge:
+            # 4a. Clean up Combination Config
             combination_config = load_json(COMBINATION_CONFIG_PATH, 'combination_config')
             for combo in combination_config:
                 # Filter the 'tags' list, keeping only tags not in the purge set
-                combo['tags'] = [tag for tag in combo.get('tags', []) if tag not in subkeys_to_purge]
+                combo['tags'] = [tag for tag in combo.get('tags', []) if tag not in tags_to_purge]
             save_json(COMBINATION_CONFIG_PATH, combination_config)
 
-            # 2b. Clean up Rules Config
+            # 4b. Clean up Rules Config
             rules_config = load_json(RULES_CONFIG_PATH, 'rules_config')
             for rule in rules_config:
-                # Filter 'conditions' by removing any that use a purged subkey
-                rule['conditions'] = [cond for cond in rule.get('conditions', []) if cond.get('tag') not in subkeys_to_purge]
+                # Filter 'conditions' by removing any that use a purged tag
+                rule['conditions'] = [cond for cond in rule.get('conditions', []) if cond.get('tag') not in tags_to_purge]
                 # Filter 'behaviors' similarly
-                rule['behaviors'] = [beh for beh in rule.get('behaviors', []) if beh.get('tag') not in subkeys_to_purge]
+                rule['behaviors'] = [beh for beh in rule.get('behaviors', []) if beh.get('tag') not in tags_to_purge]
             save_json(RULES_CONFIG_PATH, rules_config)
 
         # --- END: New Cascading Delete Logic ---

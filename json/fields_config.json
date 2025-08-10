@@ -1,10 +1,5 @@
 [
     {
-        "name": "field",
-        "type": "текст",
-        "tag_type": "поле"
-    },
-    {
         "name": "checky",
         "type": "чекбокс",
         "tag_type": "чекбокс"
