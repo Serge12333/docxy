@@ -1,1 +1,11 @@
-[]
+[
+    {
+        "name": "reg_listss",
+        "type": "текст",
+        "tag_type": "комбобокс",
+        "values": [
+            "asd",
+            "asddddd"
+        ]
+    }
+]

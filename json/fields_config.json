@@ -1,6 +1,11 @@
 [
     {
-        "name": "checky",
+        "name": "fielddddds",
+        "type": "текст",
+        "tag_type": "поле"
+    },
+    {
+        "name": "checkss",
         "type": "чекбокс",
         "tag_type": "чекбокс"
     }

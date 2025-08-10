@@ -206,6 +206,47 @@ def on_constructor_close(window_to_destroy):
     export_all_tags_to_json(window)
     window_to_destroy.destroy()
 
+# --- Insert this helper somewhere near your other utility functions (after save_json) ---
+
+def update_references(old_to_new: dict):
+    """Replace tag names in rules_config and combination_config according to mapping {old: new}."""
+    if not old_to_new:
+        return
+    try:
+        # Update combination tags
+        comb_cfg = load_json(COMBINATION_CONFIG_PATH, 'combination_config')
+        comb_changed = False
+        for combo in comb_cfg:
+            tags = combo.get('tags', [])
+            new_tags = [old_to_new.get(t, t) for t in tags]
+            if new_tags != tags:
+                combo['tags'] = new_tags
+                comb_changed = True
+        if comb_changed:
+            save_json(COMBINATION_CONFIG_PATH, comb_cfg)
+
+        # Update rules (conditions and behaviors)
+        rules_cfg = load_json(RULES_CONFIG_PATH, 'rules_config')
+        rules_changed = False
+        for rule in rules_cfg:
+            for cond in rule.get('conditions', []):
+                t = cond.get('tag')
+                if t in old_to_new:
+                    cond['tag'] = old_to_new[t]
+                    rules_changed = True
+            for beh in rule.get('behaviors', []):
+                t = beh.get('tag')
+                if t in old_to_new:
+                    beh['tag'] = old_to_new[t]
+                    rules_changed = True
+        if rules_changed:
+            save_json(RULES_CONFIG_PATH, rules_cfg)
+
+    except Exception as e:
+        # don't crash the UI on small update problems — just log
+        print(f"[update_references] error: {e}")
+
+
 def get_common_merge_data():
     """Collects data from all dynamically created UI elements for the mail merge."""
     global dynamic_frame
@@ -925,6 +966,8 @@ def open_field_window(listbox, item_to_edit, parent_window):
             fields_config.append({'name': name, 'type': data_type, 'tag_type': 'поле'})
 
         save_json(FIELDS_CONFIG_PATH, fields_config)
+        if is_edit and old_name != name:
+            update_references({old_name: name})
         refresh_all_windows(listbox)
         field_window.destroy()
 
@@ -982,6 +1025,8 @@ def open_checkbox_window(listbox, item_to_edit, parent_window):
             fields_config.append({'name': name, 'type': 'чекбокс', 'tag_type': 'чекбокс'})
 
         save_json(FIELDS_CONFIG_PATH, fields_config)
+        if is_edit and old_name != name:
+            update_references({old_name: name})
         refresh_all_windows(listbox)
         cb_window.destroy()
 
@@ -1257,6 +1302,33 @@ def open_list_window(listbox, item_to_edit, parent_window):
         final_config = load_json(config_path, '')
         final_config.append(combo_data)
         save_json(config_path, final_config)
+        mapping = {}
+
+        if original_tag_type == 'список' and is_edit:
+            # Load the old version from disk to compare
+            old_cfg = load_json(COMBOBOX_MAINKEY_PATH, '')
+            old_item = next((x for x in old_cfg if x['name'] == old_name), None)
+            if old_item:
+                old_subkeys = []
+                for mk in old_item.get('main_keys', []):
+                    old_subkeys.extend(list(list(mk.values())[0].keys()))
+
+                new_subkeys = []
+                for mk in combo_data.get('main_keys', []):
+                    new_subkeys.extend(list(list(mk.values())[0].keys()))
+
+                removed = [s for s in old_subkeys if s not in new_subkeys]
+                added = [s for s in new_subkeys if s not in old_subkeys]
+                if len(removed) == len(added):
+                    mapping.update(dict(zip(removed, added)))
+
+        # Always include the main tag rename if changed
+        if is_edit and old_name != name:
+            mapping[old_name] = name
+
+        if mapping:
+            update_references(mapping)
+
         refresh_all_windows(listbox)
         list_window.destroy()
 

@@ -1,1 +1,21 @@
-[]
+[
+    {
+        "name": "car",
+        "type": "текст",
+        "tag_type": "список",
+        "main_keys": [
+            {
+                "audi": {
+                    "colorrrriyq": "black",
+                    "bodyyyye": "flat"
+                }
+            },
+            {
+                "bmw": {
+                    "colorrrriyq": "brown",
+                    "bodyyyye": "volum"
+                }
+            }
+        ]
+    }
+]

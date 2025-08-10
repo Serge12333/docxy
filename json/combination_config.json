@@ -1,8 +1,12 @@
 [
     {
-        "name": "new_combi",
+        "name": "combi",
         "type": "текст",
         "tag_type": "сочетание",
-        "tags": []
+        "tags": [
+            "bodyy",
+            "colorr",
+            "fielddddds"
+        ]
     }
 ]
