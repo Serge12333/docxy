@@ -1,5 +1,6 @@
 pyinstaller --noconfirm --onefile --windowed --icon="icon/bee.ico" ^
 --add-data "icon;icon" ^
+--add-data "venv/Lib/site-packages/transliterate/contrib/languages;transliterate/contrib/languages" ^
 --hidden-import "tkentrycomplete" ^
 main.py
 
