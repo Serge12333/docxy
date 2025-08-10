@@ -28,16 +28,13 @@ main_key_selections = {}
 # Determine the base directory
 # Determine the base directory
 if getattr(sys, 'frozen', False):
-    # If deployed with PyInstaller, the base directory is the folder
-    # containing the executable.
-    BASE_DIR = os.path.dirname(sys.executable)
+    BASE_DIR = os.path.dirname(sys.executable)  # Dir containing the .exe
 else:
-    # If the application is run as a regular Python script,
-    # use the directory of the script file.
-    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))  # Dir containing the script
 
 # The JSON folder is inside the base directory
 JSON_DIR = os.path.join(BASE_DIR, 'json')
+IMPORT_FLD = os.path.join(BASE_DIR, 'import_fld')
 
 # Construct the full paths to each JSON file inside the 'json' folder.
 FIELDS_CONFIG_PATH = os.path.join(JSON_DIR, 'fields_config.json')
@@ -485,16 +482,6 @@ def import_fields():
     if not messagebox.askyesno("Подтверждение", "Вы уверены, что хотите импортировать поля из файла 'field_import'?"):
         return
 
-    # Determine the base directory
-    if getattr(sys, 'frozen', False):
-        # PyInstaller
-        BASE_DIR = sys._MEIPASS
-    else:
-        # Regular Python script
-        BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-
-    # Define the folder for your import files
-    IMPORT_FLD = os.path.join(BASE_DIR, 'import_fld')
 
     # Define file paths relative to the import folder
     xlsx_path = os.path.join(IMPORT_FLD, "field_import.xlsx")
@@ -1337,18 +1324,9 @@ def open_list_window(listbox, item_to_edit, parent_window):
 
     def import_from_excel():
         # Determine the base directory
-        if getattr(sys, 'frozen', False):
-            # PyInstaller
-            BASE_DIR = sys._MEIPASS
-        else:
-            # Regular Python script
-            BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-        # Define the folder for your import files
-        IMPORT_FLD = os.path.join(BASE_DIR, 'import_fld')
-
-        # Define the file path relative to the import folder
         import_path = os.path.join(IMPORT_FLD, "import.xlsx")
+
         if not os.path.exists(import_path):
             messagebox.showwarning("Ошибка", f"Файл {import_path} не найден", parent=list_window)
             return

@@ -1,1 +1,13 @@
-[]
+[
+    {
+        "name": "rr",
+        "conditions": [],
+        "behaviors": [
+            {
+                "tag": "country",
+                "condition": "транслит",
+                "rule": "uk"
+            }
+        ]
+    }
+]
