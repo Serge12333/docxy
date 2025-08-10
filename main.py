@@ -26,10 +26,11 @@ checkbox_vars = {}
 main_key_selections = {}
 
 # Determine the base directory
+# Determine the base directory
 if getattr(sys, 'frozen', False):
-    # If the application is frozen (i.e., deployed with PyInstaller),
-    # use the temporary path where files are extracted.
-    BASE_DIR = sys._MEIPASS
+    # If deployed with PyInstaller, the base directory is the folder
+    # containing the executable.
+    BASE_DIR = os.path.dirname(sys.executable)
 else:
     # If the application is run as a regular Python script,
     # use the directory of the script file.
@@ -356,8 +357,10 @@ def submit_and_save():
     try:
         # Determine the base directory for both dev and PyInstaller environments
         if getattr(sys, 'frozen', False):
-            BASE_DIR = sys._MEIPASS
+            # For PyInstaller, use the parent directory of the executable's directory
+            BASE_DIR = os.path.dirname(os.path.dirname(sys.executable))
         else:
+            # For a regular Python script, use the script's directory
             BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
         # Define source and output directories

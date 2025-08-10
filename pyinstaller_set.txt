@@ -1,0 +1,7 @@
+pyinstaller --noconfirm --onefile --windowed --icon="icon/bee.ico" ^
+--add-data "icon;icon" ^
+--add-data "json;json" ^
+--add-data "documents/template;documents/template" ^
+--add-data "import_fld;import_fld" ^
+--hidden-import "tkentrycomplete" ^
+main.py

@@ -1,12 +1,7 @@
 [
     {
-        "name": "fielddddds",
+        "name": "asd",
         "type": "текст",
         "tag_type": "поле"
-    },
-    {
-        "name": "checkss",
-        "type": "чекбокс",
-        "tag_type": "чекбокс"
     }
 ]
