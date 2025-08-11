@@ -1,12 +1,12 @@
 [
     {
-        "name": "comp",
+        "name": "main_combo",
         "type": "текст",
         "tag_type": "список",
         "main_keys": [
             {
                 "Tesla": {
-                    "full name": "Elon Musk",
+                    "full_name": "Elon Musk",
                     "adress": "3500 Deer Creek Rd, Palo Alto, CA 94304, USA",
                     "email": "info@tesla.com",
                     "bank": "JPMorgan Chase",
@@ -16,7 +16,7 @@
             },
             {
                 "Apple": {
-                    "full name": "Tim Cook",
+                    "full_name": "Tim Cook",
                     "adress": "1 Apple Park Way, Cupertino, CA 95014, USA",
                     "email": "contact@apple.com",
                     "bank": "Bank of America",
@@ -26,7 +26,7 @@
             },
             {
                 "Google": {
-                    "full name": "Sundar Pichai",
+                    "full_name": "Sundar Pichai",
                     "adress": "1600 Amphitheatre Parkway, Mountain View, CA 94043, USA",
                     "email": "support@google.com",
                     "bank": "Wells Fargo",
@@ -36,7 +36,7 @@
             },
             {
                 "Microsoft": {
-                    "full name": "Satya Nadella",
+                    "full_name": "Satya Nadella",
                     "adress": "1 Microsoft Way, Redmond, WA 98052, USA",
                     "email": "info@microsoft.com",
                     "bank": "Citibank",
@@ -46,7 +46,7 @@
             },
             {
                 "Amazon": {
-                    "full name": "Jeff Bezos",
+                    "full_name": "Jeff Bezos",
                     "adress": "410 Terry Ave N, Seattle, WA 98109, USA",
                     "email": "support@amazon.com",
                     "bank": "Chase Bank",
@@ -56,7 +56,7 @@
             },
             {
                 "Facebook": {
-                    "full name": "Mark Zuckerberg",
+                    "full_name": "Mark Zuckerberg",
                     "adress": "1 Hacker Way, Menlo Park, CA 94025, USA",
                     "email": "info@facebook.com",
                     "bank": "HSBC",
@@ -66,12 +66,43 @@
             },
             {
                 "Netflix": {
-                    "full name": "Reed Hastings",
+                    "full_name": "Reed Hastings",
                     "adress": "100 Winchester Circle, Los Gatos, CA 95032, USA",
                     "email": "contact@netflix.com",
                     "bank": "Goldman Sachs",
                     "city": "Los Gatos",
                     "country": "USA"
+                }
+            }
+        ]
+    },
+    {
+        "name": "add_main_key_combo",
+        "type": "текст",
+        "tag_type": "список",
+        "main_keys": [
+            {
+                "bmw": {
+                    "key1": "black",
+                    "key2": "volumous"
+                }
+            },
+            {
+                "audi": {
+                    "key1": "brown",
+                    "key2": "flat"
+                }
+            },
+            {
+                "zooo": {
+                    "giraf": "dss",
+                    "penguin": "dd"
+                }
+            },
+            {
+                "zoolander": {
+                    "key1": "richy",
+                    "key2": "dithcy"
                 }
             }
         ]

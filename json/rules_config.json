@@ -1,12 +1,45 @@
 [
     {
-        "name": "rr",
-        "conditions": [],
+        "name": "new_rule",
+        "conditions": [
+            {
+                "tag": "checky",
+                "condition": "True",
+                "rule": ""
+            }
+        ],
         "behaviors": [
             {
-                "tag": "country",
+                "tag": "full_name",
+                "condition": "CAPS",
+                "rule": ""
+            },
+            {
+                "tag": "full_name",
                 "condition": "транслит",
                 "rule": "uk"
+            },
+            {
+                "tag": "regular_combo",
+                "condition": "добавить текст в конце",
+                "rule": " added_text"
+            }
+        ]
+    },
+    {
+        "name": "rules",
+        "conditions": [
+            {
+                "tag": "test_field",
+                "condition": "содержит",
+                "rule": "te"
+            }
+        ],
+        "behaviors": [
+            {
+                "tag": "bank",
+                "condition": "добавить текст в начале",
+                "rule": " added text"
             }
         ]
     }

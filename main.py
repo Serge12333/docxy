@@ -1198,7 +1198,30 @@ def open_list_window(listbox, item_to_edit, parent_window):
 
                 control_frame.pack(pady=10)
 
-                tk.Button(control_frame, text="Добавить главный ключ", command=add_set).pack(side=LEFT, padx=5)
+                def add_set_and_update_dropdown():
+                    # Get subkey names from the first set (ignores values, keeps keys)
+                    if sets_list:
+                        key_structure = [kv['key'].get() for kv in sets_list[0]['key_values']]
+                    else:
+                        key_structure = []
+
+                    # Create new set with empty main key name
+                    new_key_values = [{"key": tk.StringVar(value=k), "value": tk.StringVar()} for k in key_structure]
+                    empty_main_key_var = tk.StringVar(value="")
+                    sets_list.append({
+                        "main_key": empty_main_key_var,
+                        "key_values": new_key_values
+                    })
+
+                    # Update dropdown list with empty name (will appear as blank)
+                    main_keys_list.append("")
+                    main_key_combo['values'] = main_keys_list
+
+                    # Select the new (blank) main key in dropdown
+                    selected_main_key.set("")
+                    show_subkeys_for_selected()
+                tk.Button(control_frame, text="Добавить главный ключ", command=add_set_and_update_dropdown).pack(side=LEFT, padx=5)
+
 
 
             else:

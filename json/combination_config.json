@@ -1,1 +1,19 @@
-[]
+[
+    {
+        "name": "combination",
+        "type": "текст",
+        "tag_type": "сочетание",
+        "tags": [
+            "full_name",
+            " ",
+            "city",
+            " ",
+            "today_tag",
+            " ",
+            "test_field",
+            " ",
+            "\n",
+            "test_field4"
+        ]
+    }
+]
