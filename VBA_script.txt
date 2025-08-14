@@ -5,7 +5,7 @@ Sub ConvertToMailMergeTags()
     Dim i As Integer
     
     ' Your input text
-    inputText = "test_f, test_l, test_c, test_ch, test_com, test_key1, test_key2"
+    inputText = ActiveDocument.Content.Text
     
     ' Split the text by comma and space
     fieldNames = Split(inputText, ", ")
