@@ -2684,8 +2684,24 @@ if autoload_project:
 else:
     # Show welcome window
     root = tk.Tk()
+    root.resizable (False, False)
     root.title("Выбор проекта")
     root.geometry("400x300")
+
+    try:
+        root.iconbitmap(ICON_PATH)
+    except tk.TclError:
+        print("Warning: Icon file not found or invalid format.")
+
+    # Apply icon automatically to all Toplevel windows
+    _original_toplevel_init = tk.Toplevel.__init__
+    def _custom_toplevel_init(self, *args, **kwargs):
+        _original_toplevel_init(self, *args, **kwargs)
+        try:
+            self.iconbitmap(ICON_PATH)
+        except tk.TclError:
+            pass
+    tk.Toplevel.__init__ = _custom_toplevel_init
 
     def refresh_list():
         for i in project_listbox.get_children():
@@ -2694,7 +2710,7 @@ else:
             project_listbox.insert("", "end", values=(p["name"], "Да" if p["autoload"] else "Нет"))
 
     def on_create():
-        name = simpledialog.askstring("Новый проект", "Введите имя проекта:")
+        name = simpledialog.askstring("Новый", "Введите имя проекта:")
         if name:
             if create_project(name):
                 refresh_list()
