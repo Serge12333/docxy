@@ -73,7 +73,7 @@ def save_projects(data):
 
 
 def create_project(name):
-    """Создаёт новый проект: json конфиги + папку templates + processed."""
+    """Создаёт новый проект: json конфиги + папку documents/templates/<project_name> + documents/processed/<project_name>."""
     projects = load_projects()
     if any(p["name"] == name for p in projects["projects"]):
         messagebox.showerror("Ошибка", "Проект с таким именем уже существует.")
@@ -83,7 +83,7 @@ def create_project(name):
     project_json_dir = os.path.join(BASE_DIR, "json", name)
     os.makedirs(project_json_dir, exist_ok=True)
 
-    # create empty config files
+    # Create empty config files
     for fname in [
         "fields_config.json",
         "combobox_regular.json",
@@ -93,16 +93,15 @@ def create_project(name):
         "all_tags.json",
     ]:
         with open(os.path.join(project_json_dir, fname), "w", encoding="utf-8") as f:
-            json.dump([], f, ensure_ascii=False, indent=4)  # Changed {} to []
+            json.dump([], f, ensure_ascii=False, indent=4)
 
     # --- Templates folder for this project ---
-    project_templates_dir = os.path.join(BASE_DIR, "templates", name)
+    project_templates_dir = os.path.join(BASE_DIR, "documents", "templates", name)
     os.makedirs(project_templates_dir, exist_ok=True)
 
-    # (опционально) скопировать базовые шаблоны из templates/_base
-    base_templates_dir = os.path.join(BASE_DIR, "templates", "_base")
+    # Copy base templates from documents/templates/_base
+    base_templates_dir = os.path.join(BASE_DIR, "documents", "templates", "_base")
     if os.path.exists(base_templates_dir):
-        import shutil
         for file in os.listdir(base_templates_dir):
             src = os.path.join(base_templates_dir, file)
             dst = os.path.join(project_templates_dir, file)
@@ -110,7 +109,7 @@ def create_project(name):
                 shutil.copy2(src, dst)
 
     # --- Processed folder ---
-    project_processed_dir = os.path.join(BASE_DIR, "processed", name)
+    project_processed_dir = os.path.join(BASE_DIR, "documents", "processed", name)
     os.makedirs(project_processed_dir, exist_ok=True)
 
     # --- Update projects.json ---
@@ -156,10 +155,10 @@ def set_current_project(name):
     CURRENT_PROJECT = name
 
     JSON_DIR = os.path.join(BASE_DIR, "json", CURRENT_PROJECT)
-    TEMPLATES_DIR = os.path.join(BASE_DIR, "templates", CURRENT_PROJECT)
-    PROCESSED_DIR = os.path.join(BASE_DIR, "processed", CURRENT_PROJECT)
+    TEMPLATES_DIR = os.path.join(BASE_DIR, "documents", "templates", CURRENT_PROJECT)
+    PROCESSED_DIR = os.path.join(BASE_DIR, "documents", "processed", CURRENT_PROJECT)
 
-    # make sure dirs exist
+    # Make sure dirs exist
     os.makedirs(JSON_DIR, exist_ok=True)
     os.makedirs(TEMPLATES_DIR, exist_ok=True)
     os.makedirs(PROCESSED_DIR, exist_ok=True)
@@ -173,7 +172,6 @@ def set_current_project(name):
     COMBINATION_CONFIG_PATH = os.path.join(JSON_DIR, "combination_config.json")
     RULES_CONFIG_PATH = os.path.join(JSON_DIR, "rules_config.json")
     ALL_TAGS_OUTPUT_PATH = os.path.join(JSON_DIR, "all_tags.json")
-
 
 IMPORT_FLD = os.path.join(BASE_DIR, 'import_fld')
 
@@ -484,19 +482,14 @@ def submit_and_save():
         return
 
     try:
-        # Determine the base directory for both dev and PyInstaller environments
-        if getattr(sys, 'frozen', False):
-            # For PyInstaller, use the parent directory of the executable's directory
-            BASE_DIR = os.path.dirname(os.path.dirname(sys.executable))
-        else:
-            # For a regular Python script, use the script's directory
-            BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+        # Use global project-specific directories
+        source_dir = TEMPLATES_DIR  # Points to documents/templates/<project_name>
+        output_dir = PROCESSED_DIR  # Points to documents/processed/<project_name>
 
-        # Define source and output directories
-        source_dir = os.path.join(BASE_DIR, 'documents', 'template')
-        output_dir = os.path.join(BASE_DIR, 'documents', 'processed', CURRENT_PROJECT)
-
-        # Ensure output directory exists
+        # Ensure directories exist
+        if not os.path.exists(source_dir):
+            messagebox.showerror("Ошибка", f"Директория шаблонов '{source_dir}' не найдена. Проверьте конфигурацию проекта.")
+            return
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
 
