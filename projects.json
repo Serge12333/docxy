@@ -1,4 +1,9 @@
 {
-    "projects": [],
-    "last_opened": null
+    "projects": [
+        {
+            "name": "new",
+            "autoload": false
+        }
+    ],
+    "last_opened": "new"
 }

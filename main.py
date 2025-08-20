@@ -73,28 +73,51 @@ def save_projects(data):
 
 
 def create_project(name):
+    """Создаёт новый проект: json конфиги + папку templates + processed."""
     projects = load_projects()
-    # Prevent duplicates
     if any(p["name"] == name for p in projects["projects"]):
-        messagebox.showerror("Ошибка", f"Проект '{name}' уже существует.")
+        messagebox.showerror("Ошибка", "Проект с таким именем уже существует.")
         return False
 
-    # Create JSON folder
+    # --- JSON config folder ---
     project_json_dir = os.path.join(BASE_DIR, "json", name)
     os.makedirs(project_json_dir, exist_ok=True)
-    for fname in ["fields_config.json", "combobox_regular.json",
-                  "combobox_mainkey.json", "combination_config.json",
-                  "rules_config.json", "all_tags.json"]:
-        with open(os.path.join(project_json_dir, fname), "w", encoding="utf8") as f:
-            json.dump([], f, ensure_ascii=False, indent=4)
 
-    # Create processed folder
-    os.makedirs(os.path.join(BASE_DIR, "documents", "processed", name), exist_ok=True)
+    # create empty config files
+    for fname in [
+        "fields_config.json",
+        "combobox_regular.json",
+        "combobox_mainkey.json",
+        "combination_config.json",
+        "rules_config.json",
+        "all_tags.json",
+    ]:
+        with open(os.path.join(project_json_dir, fname), "w", encoding="utf-8") as f:
+            json.dump([], f, ensure_ascii=False, indent=4)  # Changed {} to []
 
-    # Add to projects.json
+    # --- Templates folder for this project ---
+    project_templates_dir = os.path.join(BASE_DIR, "templates", name)
+    os.makedirs(project_templates_dir, exist_ok=True)
+
+    # (опционально) скопировать базовые шаблоны из templates/_base
+    base_templates_dir = os.path.join(BASE_DIR, "templates", "_base")
+    if os.path.exists(base_templates_dir):
+        import shutil
+        for file in os.listdir(base_templates_dir):
+            src = os.path.join(base_templates_dir, file)
+            dst = os.path.join(project_templates_dir, file)
+            if os.path.isfile(src):
+                shutil.copy2(src, dst)
+
+    # --- Processed folder ---
+    project_processed_dir = os.path.join(BASE_DIR, "processed", name)
+    os.makedirs(project_processed_dir, exist_ok=True)
+
+    # --- Update projects.json ---
     projects["projects"].append({"name": name, "autoload": False})
     save_projects(projects)
     return True
+
 
 
 def delete_project(name):
@@ -128,19 +151,29 @@ def get_autoload_project():
 
 # The JSON folder is inside the base directory
 def set_current_project(name):
-    global CURRENT_PROJECT, JSON_DIR
+    """Активирует проект и перенастраивает все пути."""
+    global CURRENT_PROJECT, JSON_DIR, TEMPLATES_DIR, PROCESSED_DIR
     CURRENT_PROJECT = name
+
     JSON_DIR = os.path.join(BASE_DIR, "json", CURRENT_PROJECT)
+    TEMPLATES_DIR = os.path.join(BASE_DIR, "templates", CURRENT_PROJECT)
+    PROCESSED_DIR = os.path.join(BASE_DIR, "processed", CURRENT_PROJECT)
+
+    # make sure dirs exist
+    os.makedirs(JSON_DIR, exist_ok=True)
+    os.makedirs(TEMPLATES_DIR, exist_ok=True)
+    os.makedirs(PROCESSED_DIR, exist_ok=True)
 
     global FIELDS_CONFIG_PATH, COMBOBOX_REGULAR_PATH, COMBOBOX_MAINKEY_PATH
     global COMBINATION_CONFIG_PATH, RULES_CONFIG_PATH, ALL_TAGS_OUTPUT_PATH
 
-    FIELDS_CONFIG_PATH = os.path.join(JSON_DIR, 'fields_config.json')
-    COMBOBOX_REGULAR_PATH = os.path.join(JSON_DIR, 'combobox_regular.json')
-    COMBOBOX_MAINKEY_PATH = os.path.join(JSON_DIR, 'combobox_mainkey.json')
-    COMBINATION_CONFIG_PATH = os.path.join(JSON_DIR, 'combination_config.json')
-    RULES_CONFIG_PATH = os.path.join(JSON_DIR, 'rules_config.json')
-    ALL_TAGS_OUTPUT_PATH = os.path.join(JSON_DIR, 'all_tags.json')
+    FIELDS_CONFIG_PATH = os.path.join(JSON_DIR, "fields_config.json")
+    COMBOBOX_REGULAR_PATH = os.path.join(JSON_DIR, "combobox_regular.json")
+    COMBOBOX_MAINKEY_PATH = os.path.join(JSON_DIR, "combobox_mainkey.json")
+    COMBINATION_CONFIG_PATH = os.path.join(JSON_DIR, "combination_config.json")
+    RULES_CONFIG_PATH = os.path.join(JSON_DIR, "rules_config.json")
+    ALL_TAGS_OUTPUT_PATH = os.path.join(JSON_DIR, "all_tags.json")
+
 
 IMPORT_FLD = os.path.join(BASE_DIR, 'import_fld')
 
