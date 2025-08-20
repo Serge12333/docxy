@@ -18,6 +18,29 @@ from tkinter import simpledialog
 from decimal import Decimal
 import uuid
 
+class LocalizedAskString(simpledialog._QueryString):
+    def body(self, master):
+        self.result = None
+        return super().body(master)
+
+    def buttonbox(self):
+        box = tk.Frame(self)
+
+        w = tk.Button(box, text="ОК", width=10, command=self.ok, default=tk.ACTIVE)
+        w.pack(side=tk.LEFT, padx=5, pady=5)
+        w = tk.Button(box, text="Отмена", width=10, command=self.cancel)
+        w.pack(side=tk.LEFT, padx=5, pady=5)
+
+        self.bind("<Return>", self.ok)
+        self.bind("<Escape>", self.cancel)
+
+        box.pack()
+
+def askstring_localized(title, prompt, **kwargs):
+    d = LocalizedAskString(title, prompt, **kwargs)
+    return d.result
+
+
 # --- Globals ---
 # Main container for dynamically created widgets
 dynamic_frame = None
@@ -97,7 +120,7 @@ def set_autoload(name, enabled):
 def get_autoload_project():
     projects = load_projects()
     for p in projects["projects"]:
-        if p.get("autoload"):
+        if p.get("autoload", False):
             return p["name"]
     return None
 
@@ -2662,9 +2685,19 @@ def start_main_window():
     # --- Bottom Buttons ---
     constructor_button = ttk.Button(bottom_frame, text="Конструктор", command=open_constructor_window)
     report_button = ttk.Button(bottom_frame, text="Сформировать", command=submit_and_save)
+
+    def switch_to_projects():
+        if messagebox.askyesno("Подтверждение", "Закрыть текущий проект и вернуться к выбору проектов?"):
+            window.destroy()
+            show_welcome_window()  # reopen welcome window
+
+    projects_button = ttk.Button(bottom_frame, text="Проекты", command=switch_to_projects)
+
+    # pack buttons
     ttk.Button(bottom_frame, text="Импорт", command=import_fields).pack(side=LEFT, padx=5, pady=5, fill=X, expand=True)
     constructor_button.pack(side=LEFT, padx=5, pady=5, fill=X, expand=True)
     report_button.pack(side=LEFT, padx=5, pady=5, fill=X, expand=True)
+    projects_button.pack(side=LEFT, padx=5, pady=5, fill=X, expand=True)
 
     # --- Initial Load ---
     window.bind_all("<Key>", _onKeyRelease, "+")
@@ -2672,19 +2705,9 @@ def start_main_window():
 
     window.mainloop()
 
-
-# --- Project selection ---
-projects = load_projects()
-autoload_project = get_autoload_project()
-
-if autoload_project:
-    # Load autoload project directly
-    set_current_project(autoload_project)
-    start_main_window()
-else:
-    # Show welcome window
+def show_welcome_window():
     root = tk.Tk()
-    root.resizable (False, False)
+    root.resizable(False, False)
     root.title("Выбор проекта")
     root.geometry("400x300")
 
@@ -2707,14 +2730,21 @@ else:
         for i in project_listbox.get_children():
             project_listbox.delete(i)
         for p in load_projects()["projects"]:
-            project_listbox.insert("", "end", values=(p["name"], "Да" if p["autoload"] else "Нет"))
+            project_listbox.insert(
+                "", "end",
+                values=(p["name"], "Да" if p["autoload"] else "Нет")
+            )
 
     def on_create():
-        name = simpledialog.askstring("Новый", "Введите имя проекта:")
+        name = askstring_localized(".", "Введите имя проекта:")
         if name:
             if create_project(name):
-                refresh_list()
-
+                set_current_project(name)
+                projects = load_projects()
+                projects["last_opened"] = name
+                save_projects(projects)
+                root.destroy()
+                start_main_window()
     def on_load():
         sel = project_listbox.selection()
         if not sel:
@@ -2741,10 +2771,24 @@ else:
         if not sel:
             return
         name = project_listbox.item(sel[0])["values"][0]
-        set_autoload(name, True)
+
+        projects = load_projects()
+        for p in projects["projects"]:
+            if p["name"] == name:
+                # toggle
+                new_state = not p.get("autoload", False)
+                p["autoload"] = new_state
+            else:
+                # all other projects must be off
+                p["autoload"] = False
+        save_projects(projects)
         refresh_list()
 
-    project_listbox = ttk.Treeview(root, columns=("Имя", "Загружать при старте"), show="headings")
+    project_listbox = ttk.Treeview(
+        root,
+        columns=("Имя", "Загружать при старте"),
+        show="headings"
+    )
     project_listbox.heading("Имя", text="Имя")
     project_listbox.heading("Загружать при старте", text="Загружать при старте")
     project_listbox.column("Имя", anchor="center", width=200)
@@ -2761,3 +2805,17 @@ else:
 
     refresh_list()
     root.mainloop()
+
+
+# --- Startup ---
+if __name__ == "__main__":
+    projects = load_projects()
+    autoload_project = get_autoload_project()
+
+    if autoload_project:
+        set_current_project(autoload_project)
+        start_main_window()
+    else:
+        show_welcome_window()
+
+
