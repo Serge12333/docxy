@@ -14,6 +14,7 @@ from datetime import datetime, timedelta, date
 import shutil
 import openpyxl
 from openpyxl.styles import numbers
+from tkinter import simpledialog
 from decimal import Decimal
 import uuid
 
@@ -32,18 +33,93 @@ if getattr(sys, 'frozen', False):
 else:
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))  # Dir containing the script
 
+PROJECTS_FILE = os.path.join(BASE_DIR, "projects.json")
+CURRENT_PROJECT = None
+
+
+def load_projects():
+    if not os.path.exists(PROJECTS_FILE):
+        return {"projects": [], "last_opened": None}
+    with open(PROJECTS_FILE, "r", encoding="utf8") as f:
+        return json.load(f)
+
+
+def save_projects(data):
+    with open(PROJECTS_FILE, "w", encoding="utf8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=4)
+
+
+def create_project(name):
+    projects = load_projects()
+    # Prevent duplicates
+    if any(p["name"] == name for p in projects["projects"]):
+        messagebox.showerror("Ошибка", f"Проект '{name}' уже существует.")
+        return False
+
+    # Create JSON folder
+    project_json_dir = os.path.join(BASE_DIR, "json", name)
+    os.makedirs(project_json_dir, exist_ok=True)
+    for fname in ["fields_config.json", "combobox_regular.json",
+                  "combobox_mainkey.json", "combination_config.json",
+                  "rules_config.json", "all_tags.json"]:
+        with open(os.path.join(project_json_dir, fname), "w", encoding="utf8") as f:
+            json.dump([], f, ensure_ascii=False, indent=4)
+
+    # Create processed folder
+    os.makedirs(os.path.join(BASE_DIR, "documents", "processed", name), exist_ok=True)
+
+    # Add to projects.json
+    projects["projects"].append({"name": name, "autoload": False})
+    save_projects(projects)
+    return True
+
+
+def delete_project(name):
+    projects = load_projects()
+    projects["projects"] = [p for p in projects["projects"] if p["name"] != name]
+    if projects.get("last_opened") == name:
+        projects["last_opened"] = None
+    save_projects(projects)
+
+    # Delete only JSONs
+    json_dir = os.path.join(BASE_DIR, "json", name)
+    if os.path.exists(json_dir):
+        shutil.rmtree(json_dir)
+
+
+def set_autoload(name, enabled):
+    projects = load_projects()
+    for p in projects["projects"]:
+        p["autoload"] = (p["name"] == name) if enabled else False
+    save_projects(projects)
+
+
+def get_autoload_project():
+    projects = load_projects()
+    for p in projects["projects"]:
+        if p.get("autoload"):
+            return p["name"]
+    return None
+
+
+
 # The JSON folder is inside the base directory
-JSON_DIR = os.path.join(BASE_DIR, 'json')
+def set_current_project(name):
+    global CURRENT_PROJECT, JSON_DIR
+    CURRENT_PROJECT = name
+    JSON_DIR = os.path.join(BASE_DIR, "json", CURRENT_PROJECT)
+
+    global FIELDS_CONFIG_PATH, COMBOBOX_REGULAR_PATH, COMBOBOX_MAINKEY_PATH
+    global COMBINATION_CONFIG_PATH, RULES_CONFIG_PATH, ALL_TAGS_OUTPUT_PATH
+
+    FIELDS_CONFIG_PATH = os.path.join(JSON_DIR, 'fields_config.json')
+    COMBOBOX_REGULAR_PATH = os.path.join(JSON_DIR, 'combobox_regular.json')
+    COMBOBOX_MAINKEY_PATH = os.path.join(JSON_DIR, 'combobox_mainkey.json')
+    COMBINATION_CONFIG_PATH = os.path.join(JSON_DIR, 'combination_config.json')
+    RULES_CONFIG_PATH = os.path.join(JSON_DIR, 'rules_config.json')
+    ALL_TAGS_OUTPUT_PATH = os.path.join(JSON_DIR, 'all_tags.json')
+
 IMPORT_FLD = os.path.join(BASE_DIR, 'import_fld')
-
-# Construct the full paths to each JSON file inside the 'json' folder.
-FIELDS_CONFIG_PATH = os.path.join(JSON_DIR, 'fields_config.json')
-COMBOBOX_REGULAR_PATH = os.path.join(JSON_DIR, 'combobox_regular.json')
-COMBOBOX_MAINKEY_PATH = os.path.join(JSON_DIR, 'combobox_mainkey.json')
-COMBINATION_CONFIG_PATH = os.path.join(JSON_DIR, 'combination_config.json')
-RULES_CONFIG_PATH = os.path.join(JSON_DIR, 'rules_config.json')
-ALL_TAGS_OUTPUT_PATH = os.path.join(JSON_DIR, 'all_tags.json')
-
 
 # --- Utility and Core Logic Functions ---
 
@@ -362,7 +438,7 @@ def submit_and_save():
 
         # Define source and output directories
         source_dir = os.path.join(BASE_DIR, 'documents', 'template')
-        output_dir = os.path.join(BASE_DIR, 'documents', 'processed')
+        output_dir = os.path.join(BASE_DIR, 'documents', 'processed', CURRENT_PROJECT)
 
         # Ensure output directory exists
         if not os.path.exists(output_dir):
@@ -2498,7 +2574,9 @@ def open_edit_rule_window(listbox, constructor_window):
     tk.Button(button_frame, text="ОТМЕНА", width=10, command=edit_rule_window.destroy).grid(row=0, column=1, padx=5)
 
 
-def delete_rule(listbox, parent_window, rules_file=RULES_CONFIG_PATH):
+def delete_rule(listbox, parent_window, rules_file=None):
+    if rules_file is None:
+        rules_file = RULES_CONFIG_PATH
     """Deletes one or more selected rules."""
     selected_items = listbox.selection()
     if not selected_items:
@@ -2535,11 +2613,7 @@ def delete_rule(listbox, parent_window, rules_file=RULES_CONFIG_PATH):
         messagebox.showerror("Ошибка", f"Не удалось сохранить изменения: {str(e)}", parent=parent_window)
 
 
-# --- Main Window Creation ---
-# Create a single Tkinter window instance
-window = tk.Tk()
-window.title("Doxy v2.1")
-window.resizable(False, False)
+# --- Startup logic ---
 
 # Determine the base directory
 if getattr(sys, 'frozen', False):
@@ -2547,47 +2621,127 @@ if getattr(sys, 'frozen', False):
 else:
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-# Path to icon
 ICON_DIR = os.path.join(BASE_DIR, 'icon')
 ICON_PATH = os.path.join(ICON_DIR, "bee.ico")
 
-# Set main window icon
-try:
-    window.iconbitmap(ICON_PATH)
-except tk.TclError:
-    print("Warning: Icon file not found or invalid format.")
 
-# Apply icon automatically to all Toplevel windows
-_original_toplevel_init = tk.Toplevel.__init__
-def _custom_toplevel_init(self, *args, **kwargs):
-    _original_toplevel_init(self, *args, **kwargs)
+def start_main_window():
+    """Builds and launches the main application window after a project is selected."""
+    global window, dynamic_frame
+
+    # Create a single Tkinter window instance
+    window = tk.Tk()
+    window.title("Doxy v2.1")
+    window.resizable(False, False)
+
+    # Set main window icon
     try:
-        self.iconbitmap(ICON_PATH)
+        window.iconbitmap(ICON_PATH)
     except tk.TclError:
-        pass
+        print("Warning: Icon file not found or invalid format.")
 
-tk.Toplevel.__init__ = _custom_toplevel_init
+    # Apply icon automatically to all Toplevel windows
+    _original_toplevel_init = tk.Toplevel.__init__
+    def _custom_toplevel_init(self, *args, **kwargs):
+        _original_toplevel_init(self, *args, **kwargs)
+        try:
+            self.iconbitmap(ICON_PATH)
+        except tk.TclError:
+            pass
+    tk.Toplevel.__init__ = _custom_toplevel_init
 
-# Main layout frames
-# This frame will hold the dynamic widgets and expand with them
-dynamic_frame = tk.Frame(window, padx=10, pady=10)
-dynamic_frame.pack(fill="both", expand=True)
+    # --- Main layout frames ---
+    dynamic_frame = tk.Frame(window, padx=10, pady=10)
+    dynamic_frame.pack(fill="both", expand=True)
 
-# A separator for visual clarity
-ttk.Separator(window, orient='horizontal').pack(fill='x', pady=5)
+    ttk.Separator(window, orient='horizontal').pack(fill='x', pady=5)
 
-# This frame holds the static buttons at the bottom
-bottom_frame = tk.Frame(window)
-bottom_frame.pack(fill="x", padx=10, pady=(0, 10))
+    bottom_frame = tk.Frame(window)
+    bottom_frame.pack(fill="x", padx=10, pady=(0, 10))
 
-# --- Bottom Buttons ---
-constructor_button = ttk.Button(bottom_frame, text="Конструктор", command=open_constructor_window)
-report_button = ttk.Button(bottom_frame, text="Сформировать", command=submit_and_save)
-ttk.Button(bottom_frame, text="Импорт", command=import_fields).pack(side=LEFT, padx=5, pady=5, fill=X, expand=True)
-constructor_button.pack(side=LEFT, padx=5, pady=5, fill=X, expand=True)
-report_button.pack(side=LEFT, padx=5, pady=5, fill=X, expand=True)
+    # --- Bottom Buttons ---
+    constructor_button = ttk.Button(bottom_frame, text="Конструктор", command=open_constructor_window)
+    report_button = ttk.Button(bottom_frame, text="Сформировать", command=submit_and_save)
+    ttk.Button(bottom_frame, text="Импорт", command=import_fields).pack(side=LEFT, padx=5, pady=5, fill=X, expand=True)
+    constructor_button.pack(side=LEFT, padx=5, pady=5, fill=X, expand=True)
+    report_button.pack(side=LEFT, padx=5, pady=5, fill=X, expand=True)
 
-# --- Initial Load and Main Loop ---
-window.bind_all("<Key>", _onKeyRelease, "+")
-load_all_dynamic_widgets()
-window.mainloop()
+    # --- Initial Load ---
+    window.bind_all("<Key>", _onKeyRelease, "+")
+    load_all_dynamic_widgets()
+
+    window.mainloop()
+
+
+# --- Project selection ---
+projects = load_projects()
+autoload_project = get_autoload_project()
+
+if autoload_project:
+    # Load autoload project directly
+    set_current_project(autoload_project)
+    start_main_window()
+else:
+    # Show welcome window
+    root = tk.Tk()
+    root.title("Выбор проекта")
+    root.geometry("400x300")
+
+    def refresh_list():
+        for i in project_listbox.get_children():
+            project_listbox.delete(i)
+        for p in load_projects()["projects"]:
+            project_listbox.insert("", "end", values=(p["name"], "Да" if p["autoload"] else "Нет"))
+
+    def on_create():
+        name = simpledialog.askstring("Новый проект", "Введите имя проекта:")
+        if name:
+            if create_project(name):
+                refresh_list()
+
+    def on_load():
+        sel = project_listbox.selection()
+        if not sel:
+            return
+        name = project_listbox.item(sel[0])["values"][0]
+        set_current_project(name)
+        projects = load_projects()
+        projects["last_opened"] = name
+        save_projects(projects)
+        root.destroy()
+        start_main_window()   # <-- Launch app after project chosen
+
+    def on_delete():
+        sel = project_listbox.selection()
+        if not sel:
+            return
+        name = project_listbox.item(sel[0])["values"][0]
+        if messagebox.askyesno("Подтверждение", f"Удалить проект '{name}'?"):
+            delete_project(name)
+            refresh_list()
+
+    def on_autoload():
+        sel = project_listbox.selection()
+        if not sel:
+            return
+        name = project_listbox.item(sel[0])["values"][0]
+        set_autoload(name, True)
+        refresh_list()
+
+    project_listbox = ttk.Treeview(root, columns=("Имя", "Загружать при старте"), show="headings")
+    project_listbox.heading("Имя", text="Имя")
+    project_listbox.heading("Загружать при старте", text="Загружать при старте")
+    project_listbox.column("Имя", anchor="center", width=200)
+    project_listbox.column("Загружать при старте", anchor="center", width=200)
+    project_listbox.pack(fill="both", expand=True)
+
+    btn_frame = tk.Frame(root)
+    btn_frame.pack(pady=10)
+
+    tk.Button(btn_frame, text="Создать", command=on_create).grid(row=0, column=0, padx=5)
+    tk.Button(btn_frame, text="Загрузить", command=on_load).grid(row=0, column=1, padx=5)
+    tk.Button(btn_frame, text="Удалить", command=on_delete).grid(row=0, column=2, padx=5)
+    tk.Button(btn_frame, text="Автозагрузка", command=on_autoload).grid(row=0, column=3, padx=5)
+
+    refresh_list()
+    root.mainloop()
