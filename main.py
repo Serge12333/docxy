@@ -17,6 +17,7 @@ from openpyxl.styles import numbers
 from tkinter import simpledialog
 from decimal import Decimal
 import uuid
+from decimal import Decimal, getcontext
 
 class LocalizedAskString(simpledialog._QueryString):
     def body(self, master):
@@ -165,6 +166,7 @@ def set_current_project(name):
 
     global FIELDS_CONFIG_PATH, COMBOBOX_REGULAR_PATH, COMBOBOX_MAINKEY_PATH
     global COMBINATION_CONFIG_PATH, RULES_CONFIG_PATH, ALL_TAGS_OUTPUT_PATH
+    global NUMBER_CONFIG_PATH
 
     FIELDS_CONFIG_PATH = os.path.join(JSON_DIR, "fields_config.json")
     COMBOBOX_REGULAR_PATH = os.path.join(JSON_DIR, "combobox_regular.json")
@@ -172,6 +174,7 @@ def set_current_project(name):
     COMBINATION_CONFIG_PATH = os.path.join(JSON_DIR, "combination_config.json")
     RULES_CONFIG_PATH = os.path.join(JSON_DIR, "rules_config.json")
     ALL_TAGS_OUTPUT_PATH = os.path.join(JSON_DIR, "all_tags.json")
+    NUMBER_CONFIG_PATH = os.path.join(JSON_DIR, "number_config.json")
 
 IMPORT_FLD = os.path.join(BASE_DIR, 'import_fld')
 
@@ -217,6 +220,14 @@ def save_json(file_path, data):
         if os.path.exists(temp_file):
             os.remove(temp_file)
 
+def load_number_config():
+    """Loads Число tags configuration from JSON."""
+    return load_json(NUMBER_CONFIG_PATH, 'number_config')
+
+def save_number_config(data):
+    """Saves Число tags configuration to JSON."""
+    save_json(NUMBER_CONFIG_PATH, data)
+
 def populate_tags_listbox(tags_listbox):
     """Populates the tags listbox in the constructor window."""
     for i in tags_listbox.get_children():
@@ -236,6 +247,14 @@ def populate_tags_listbox(tags_listbox):
             all_items.append((combo['name'], combo['type'], combo.get('tag_type', 'сочетание')))
     except Exception as e:
         messagebox.showerror("Ошибка", f"Ошибка при загрузке combination_config: {str(e)}")
+
+    # Load numbers
+    try:
+        number_config = load_number_config()
+        for num in number_config:
+            all_items.append((num['name'], num['type'], num.get('tag_type', 'число')))
+    except Exception as e:
+        messagebox.showerror("Ошибка", f"Ошибка при загрузке number_config: {str(e)}")
 
     all_items.sort(key=lambda x: x[0])
     for item in all_items:
@@ -276,6 +295,16 @@ def refresh_all_windows(listbox_to_refresh):
     # Refresh the constructor's listbox
     if listbox_to_refresh and listbox_to_refresh.winfo_exists():
         populate_tags_listbox(listbox_to_refresh)
+
+    # Update Число values
+    merge_data = get_common_merge_data()
+    numbers = load_number_config()
+    for num in numbers:
+        val = evaluate_number_sequence(num['sequence'], merge_data)
+        for widget in dynamic_frame.winfo_children():
+            if widget._name == num['name']:
+                widget.config(text=val)
+
 
 
 def export_all_tags_to_json(parent_window):
@@ -424,6 +453,13 @@ def get_common_merge_data():
             else:
                 combined_value += merge_data.get(tag, tag)
         merge_data[combo['name']] = combined_value
+
+    # Include numbers
+    numbers = load_number_config()
+    for num in numbers:
+        val = evaluate_number_sequence(num['sequence'], merge_data)
+        merge_data[num['name']] = val
+
 
     return merge_data
 
@@ -832,6 +868,19 @@ def load_all_dynamic_widgets(initial_state=None):
         data_dict = {list(mk.keys())[0]: list(mk.values())[0] for mk in combo['main_keys']}
         comboboxes_list.append((combo['name'], combo['type'], 'список', values, data_dict))
 
+    # --- Load Число tags ---
+    numbers = load_number_config()
+    for num in numbers:
+        row, base_col = get_next_grid_position()
+        label_name = tk.Label(dynamic_frame, text=f"{num['name']}:")
+        label_name._name = f"{num['name']}l"
+        label_name.grid(row=row, column=base_col, padx=5, pady=2, sticky="e")
+
+        value_label = tk.Label(dynamic_frame, text="0,00")
+        value_label._name = num['name']
+        value_label.grid(row=row, column=base_col + 1, padx=5, pady=2, sticky="w")
+
+
     # --- Sort each group alphabetically by name ---
     fields_list.sort(key=lambda x: x[0].lower())
     comboboxes_list.sort(key=lambda x: x[0].lower())
@@ -1004,7 +1053,7 @@ def open_new_tag_window(listbox, parent_window):
     """Window to choose what kind of new tag to create."""
     new_window = tk.Toplevel(parent_window)
     new_window.title("Новый тег")
-    new_window.geometry("200x250")
+    new_window.wm_minsize(width=250, height=0)
     new_window.resizable(False, False)
     new_window.focus_set()
     new_window.grab_set()
@@ -1013,13 +1062,13 @@ def open_new_tag_window(listbox, parent_window):
     btn_frame.pack(pady=10, expand=True)
 
     # The listbox needs to be passed to refresh it upon creation
-    tk.Button(btn_frame, text="ПОЛЕ", width=15, height=2,
-              command=lambda: [new_window.destroy(), open_field_window(listbox, None, parent_window)]).pack(pady=5)
+    tk.Button(btn_frame, text="ПОЛЕ", width=15, height=2, command=lambda: [new_window.destroy(), open_field_window(listbox, None, parent_window)]).pack(pady=5)
     tk.Button(btn_frame, text="СПИСОК", width=15, height=2,
               command=lambda: [new_window.destroy(), open_list_window(listbox, None, parent_window)]).pack(pady=5)
     tk.Button(btn_frame, text="ЧЕКБОКС", width=15, height=2,
               command=lambda: [new_window.destroy(), open_checkbox_window(listbox, None, parent_window)]).pack(pady=5)
     tk.Button(btn_frame, text="СОЧЕТАНИЕ", width=15, height=2, command=lambda: [new_window.destroy(), open_combination_window(listbox, None, parent_window)]).pack(pady=5)
+    tk.Button(btn_frame, text="ЧИСЛО", width=15, height=2, command=lambda: [new_window.destroy(), open_number_window(listbox, None, parent_window)]).pack(pady=5)
 
 
 def open_field_window(listbox, item_to_edit, parent_window):
@@ -1749,6 +1798,147 @@ def open_combination_window(listbox, item_to_edit, parent_window):
 
     refresh_listbox()
 
+def open_number_window(listbox, item_to_edit, parent_window):
+    """Window to create/edit Число tag (numeric formula)."""
+    is_edit = item_to_edit is not None
+    title = "Редактировать число" if is_edit else "Создание числа"
+
+    num_window = tk.Toplevel(parent_window)
+    num_window.title(title)
+    num_window.resizable(False, False)
+    num_window.focus_set()
+    num_window.grab_set()
+
+    name_var = tk.StringVar()
+    sequence = []
+    old_name = None
+
+    if is_edit:
+        old_name, _, _ = listbox.item(item_to_edit)['values']
+        number_config = load_number_config()
+        existing = next((x for x in number_config if x['name'] == old_name), None)
+        if existing:
+            name_var.set(existing['name'])
+            sequence = existing['sequence'][:]
+
+    all_tags = get_all_tags_for_constructor()
+    operators = ["+", "-", "*", "/"]
+
+    def refresh_listbox():
+        num_listbox.delete(*num_listbox.get_children())
+        for i, elem in enumerate(sequence):
+            num_listbox.insert("", "end", values=(i + 1, elem))
+
+    def add_element(elem):
+        if elem:
+            sequence.append(elem)
+            refresh_listbox()
+
+    def remove_element():
+        sel = num_listbox.selection()
+        if sel:
+            idx = int(num_listbox.item(sel[0])['values'][0]) - 1
+            if 0 <= idx < len(sequence):
+                del sequence[idx]
+                refresh_listbox()
+
+    def move_element(direction):
+        sel = num_listbox.selection()
+        if not sel:
+            return
+        idx = int(num_listbox.item(sel[0])['values'][0]) - 1
+        if direction == "up" and idx > 0:
+            sequence[idx], sequence[idx-1] = sequence[idx-1], sequence[idx]
+        elif direction == "down" and idx < len(sequence)-1:
+            sequence[idx], sequence[idx+1] = sequence[idx+1], sequence[idx]
+        refresh_listbox()
+
+    def save_number():
+        name = name_var.get().strip()
+        if not name:
+            messagebox.showwarning("Ошибка", "Введите имя числа.", parent=num_window)
+            return
+        if not sequence:
+            messagebox.showwarning("Ошибка", "Добавьте хотя бы один элемент.", parent=num_window)
+            return
+
+        # Check duplicate names
+        all_configs = (load_json(path, '') for path in
+                       [FIELDS_CONFIG_PATH, COMBOBOX_REGULAR_PATH, COMBOBOX_MAINKEY_PATH,
+                        COMBINATION_CONFIG_PATH, NUMBER_CONFIG_PATH])
+        all_names = {item['name'] for cfg in all_configs for item in cfg if item['name'] != old_name}
+        if name in all_names:
+            messagebox.showwarning("Ошибка", f"Имя '{name}' уже используется.", parent=num_window)
+            return
+
+        number_config = load_number_config()
+        entry = {"name": name, "type": "число", "tag_type": "число", "sequence": sequence}
+        if is_edit:
+            for i, n in enumerate(number_config):
+                if n['name'] == old_name:
+                    number_config[i] = entry
+                    break
+        else:
+            number_config.append(entry)
+
+        save_number_config(number_config)
+        refresh_all_windows(listbox)
+        num_window.destroy()
+
+    # --- UI Layout ---
+    top = tk.Frame(num_window)
+    top.pack(fill="x", padx=10, pady=5)
+    tk.Label(top, text="Имя числа:").pack(side="left")
+    tk.Entry(top, textvariable=name_var, width=30).pack(side="left", padx=5)
+
+    mid = tk.Frame(num_window)
+    mid.pack(fill="both", expand=True, padx=10, pady=5)
+
+    num_listbox = ttk.Treeview(mid, columns=("№", "Элемент"), show="headings", height=10)
+    num_listbox.heading("№", text="№")
+    num_listbox.heading("Элемент", text="Элемент")
+    num_listbox.column("№", width=40, anchor="center")
+    num_listbox.column("Элемент", width=150, anchor="center")
+    num_listbox.pack(side="left", fill="both", expand=True)
+
+    btns = tk.Frame(mid)
+    btns.pack(side="left", padx=5)
+    tk.Button(btns, text="Удалить", command=remove_element).pack(pady=2)
+    tk.Button(btns, text="Вверх", command=lambda: move_element("up")).pack(pady=2)
+    tk.Button(btns, text="Вниз", command=lambda: move_element("down")).pack(pady=2)
+
+    bottom = tk.Frame(num_window)
+    bottom.pack(fill="x", padx=10, pady=5)
+
+    # Tag selector
+    tag_combo = ttk.Combobox(bottom, values=all_tags, state="readonly")
+    tag_combo.pack(side="left", padx=5)
+    tk.Button(bottom, text="Добавить тег", command=lambda: add_element(tag_combo.get())).pack(side="left", padx=5)
+
+    # Digit entry
+    digit_var = tk.StringVar()
+    digit_entry = tk.Entry(bottom, textvariable=digit_var, width=10)
+    digit_entry.pack(side="left", padx=5)
+    tk.Button(bottom, text="Добавить число",
+              command=lambda: add_element(digit_var.get().replace(".", ",") if digit_var.get() else None)
+              ).pack(side="left", padx=5)
+
+    # Operator
+    op_combo = ttk.Combobox(bottom, values=operators, state="readonly", width=5)
+    op_combo.pack(side="left", padx=5)
+    tk.Button(bottom, text="Добавить оператор", command=lambda: add_element(op_combo.get())).pack(side="left", padx=5)
+
+    # Brackets
+    tk.Button(bottom, text="(", command=lambda: add_element("(")).pack(side="left", padx=2)
+    tk.Button(bottom, text=")", command=lambda: add_element(")")).pack(side="left", padx=2)
+
+    okcancel = tk.Frame(num_window)
+    okcancel.pack(pady=10)
+    tk.Button(okcancel, text="ОК", width=10, command=save_number).pack(side="left", padx=5)
+    tk.Button(okcancel, text="Отмена", width=10, command=num_window.destroy).pack(side="left", padx=5)
+
+    refresh_listbox()
+
 
 def load_combination_config():
     """Load combination config from JSON file, initializing if not found."""
@@ -2061,6 +2251,36 @@ def apply_behaviors(behaviors, merge_data):
             print(f"Error applying behavior {action} on {tag}: {e}")
     return merge_data
 
+getcontext().prec = 28
+
+def evaluate_number_sequence(sequence, merge_data):
+    expr_parts = []
+    for elem in sequence:
+        if elem in merge_data:  # tag
+            val = merge_data.get(elem, "0")
+            try:
+                val = str(val).replace(",", ".")
+                Decimal(val)  # check
+            except:
+                val = "0"
+            expr_parts.append(f"Decimal('{val}')")
+        elif elem in ["+", "-", "*", "/", "(", ")"]:
+            expr_parts.append(elem)
+        else:  # digit
+            try:
+                val = str(elem).replace(",", ".")
+                Decimal(val)
+            except:
+                val = "0"
+            expr_parts.append(f"Decimal('{val}')")
+
+    expr = " ".join(expr_parts)
+    try:
+        result = eval(expr, {"Decimal": Decimal})
+        formatted = f"{result:.2f}".replace(".", ",")
+        return formatted
+    except Exception:
+        return "0,00"
 
 def open_create_rule_window(listbox, constructor_window):
     create_rule_window = tk.Toplevel(constructor_window)
