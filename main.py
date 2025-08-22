@@ -842,10 +842,10 @@ def load_all_dynamic_widgets(initial_state=None):
     if initial_state is None:
         initial_state = {}
 
-    # --- (The rest of the function for loading and sorting configs remains the same) ---
     fields_list = []
     comboboxes_list = []
     checkboxes_list = []
+    numbers_list = []   # <-- NEW group for Число
 
     # --- Load Fields & Checkboxes ---
     fields_config = load_json(FIELDS_CONFIG_PATH, 'fields_config')
@@ -871,34 +871,21 @@ def load_all_dynamic_widgets(initial_state=None):
     # --- Load Число tags ---
     numbers = load_number_config()
     for num in numbers:
-        row, base_col = get_next_grid_position()
-        label_name = tk.Label(dynamic_frame, text=f"{num['name']}:")
-        label_name._name = f"{num['name']}l"
-        label_name.grid(row=row, column=base_col, padx=5, pady=2, sticky="e")
-
-        value_label = tk.Label(dynamic_frame, text="0,00")
-        value_label._name = num['name']
-        value_label.grid(row=row, column=base_col + 1, padx=5, pady=2, sticky="w")
-
+        numbers_list.append((num['name'], None, 'число', None, None))
 
     # --- Sort each group alphabetically by name ---
     fields_list.sort(key=lambda x: x[0].lower())
     comboboxes_list.sort(key=lambda x: x[0].lower())
     checkboxes_list.sort(key=lambda x: x[0].lower())
+    numbers_list.sort(key=lambda x: x[0].lower())   # <-- sort числа too
 
     # --- Combine groups in desired order ---
-    ordered_widgets = fields_list + comboboxes_list + checkboxes_list
+    ordered_widgets = fields_list + comboboxes_list + checkboxes_list + numbers_list
 
     # --- Place widgets in order, passing the saved value ---
     for idx, (name, data_type, tag_type, values, main_key_data) in enumerate(ordered_widgets):
-        # ... (Separator logic remains the same) ...
-
-        # Get the saved value for this widget, if it exists
         saved_value = initial_state.get(name)
-
-        # Pass the saved value to the creation function
         add_dynamic_widget(name, data_type, tag_type, values, main_key_data, initial_value=saved_value)
-
 
 
 def get_all_tags_for_constructor():
@@ -1999,6 +1986,8 @@ def open_edit_tag_window(listbox, parent_window):
         open_list_window(listbox, item_id, parent_window)
     elif tag_type == 'сочетание':
         open_combination_window(listbox, item_id, parent_window)
+    elif tag_type == "число":
+        open_number_window(listbox, item_id, parent_window)
     else:
         messagebox.showinfo("Информация", "Редактирование для этого типа тега еще не реализовано.")
 
@@ -2006,7 +1995,7 @@ def open_edit_tag_window(listbox, parent_window):
 def delete_tag(tags_listbox, parent_window):
     """
     Deletes one or more selected tags and performs a cascading delete
-    of their subkeys from rules and combinations.
+    of their subkeys from rules, combinations, and numbers.
     """
     selected_items = tags_listbox.selection()
     if not selected_items:
@@ -2023,9 +2012,13 @@ def delete_tag(tags_listbox, parent_window):
 
     # Format a user-friendly confirmation message, now with a warning
     names_str = "\n- ".join([t['name'] for t in tags_to_delete])
-    if not messagebox.askyesno("Подтверждение", f"Вы уверены, что хотите удалить следующие теги?\n\n- {names_str}\n\n"
-                                               "ВНИМАНИЕ: Все выбранные теги и их дочерние элементы (для списков) будут также удалены из всех правил и сочетаний.",
-                               parent=parent_window):
+    if not messagebox.askyesno(
+        "Подтверждение",
+        f"Вы уверены, что хотите удалить следующие теги?\n\n- {names_str}\n\n"
+        "ВНИМАНИЕ: Все выбранные теги и их дочерние элементы (для списков) будут также удалены "
+        "из всех правил, сочетаний и чисел.",
+        parent=parent_window
+    ):
         return
 
     try:
@@ -2043,7 +2036,6 @@ def delete_tag(tags_listbox, parent_window):
             for combo in mainkey_config:
                 if combo.get('name') in list_tags_to_delete:
                     for mk_dict in combo.get('main_keys', []):
-                        # mk_dict is like: {"Main Key 1": {"subkey1": "val1", "subkey2": "val2"}}
                         if mk_dict and isinstance(list(mk_dict.values())[0], dict):
                             subkeys_dict = list(mk_dict.values())[0]
                             for subkey_name in subkeys_dict.keys():
@@ -2057,28 +2049,31 @@ def delete_tag(tags_listbox, parent_window):
             # 4a. Clean up Combination Config
             combination_config = load_json(COMBINATION_CONFIG_PATH, 'combination_config')
             for combo in combination_config:
-                # Filter the 'tags' list, keeping only tags not in the purge set
-                combo['tags'] = [tag for tag in combo.get('tags', []) if tag not in tags_to_purge]
+                combo['sequence'] = [elem for elem in combo.get('sequence', []) if elem not in tags_to_purge]
             save_json(COMBINATION_CONFIG_PATH, combination_config)
 
             # 4b. Clean up Rules Config
             rules_config = load_json(RULES_CONFIG_PATH, 'rules_config')
             for rule in rules_config:
-                # Filter 'conditions' by removing any that use a purged tag
                 rule['conditions'] = [cond for cond in rule.get('conditions', []) if cond.get('tag') not in tags_to_purge]
-                # Filter 'behaviors' similarly
                 rule['behaviors'] = [beh for beh in rule.get('behaviors', []) if beh.get('tag') not in tags_to_purge]
             save_json(RULES_CONFIG_PATH, rules_config)
 
-        # --- END: New Cascading Delete Logic ---
+            # 4c. Clean up Number Config
+            number_config = load_json(NUMBER_CONFIG_PATH, 'number_config')
+            for num in number_config:
+                num['sequence'] = [elem for elem in num.get('sequence', []) if elem not in tags_to_purge]
+            save_json(NUMBER_CONFIG_PATH, number_config)
 
+        # --- END: New Cascading Delete Logic ---
 
         # --- Original Deletion Logic (for the main tags themselves) ---
         deletions_by_file = {
             FIELDS_CONFIG_PATH: set(),
             COMBOBOX_REGULAR_PATH: set(),
             COMBOBOX_MAINKEY_PATH: set(),
-            COMBINATION_CONFIG_PATH: set()
+            COMBINATION_CONFIG_PATH: set(),
+            NUMBER_CONFIG_PATH: set()
         }
 
         for tag in tags_to_delete:
@@ -2092,6 +2087,8 @@ def delete_tag(tags_listbox, parent_window):
                 deletions_by_file[COMBOBOX_MAINKEY_PATH].add(tag_name)
             elif tag_type == 'сочетание':
                 deletions_by_file[COMBINATION_CONFIG_PATH].add(tag_name)
+            elif tag_type == 'число':
+                deletions_by_file[NUMBER_CONFIG_PATH].add(tag_name)
 
         # Process each configuration file that has items to be deleted
         for config_path, names_to_delete_set in deletions_by_file.items():
@@ -2108,6 +2105,7 @@ def delete_tag(tags_listbox, parent_window):
 
     except Exception as e:
         messagebox.showerror("Ошибка", f"Произошла ошибка при удалении тегов: {e}", parent=parent_window)
+
 
 
 # This function is needed to refresh the constructor listbox from other windows
