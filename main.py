@@ -2384,13 +2384,13 @@ def apply_behaviors(behaviors, merge_data):
             elif action == "добавить рабочих дней":
                 date_obg = datetime.strptime(value, '%d.%m.%Y')
                 days = int(rule)
-                np_date = np.datetime64(date_obg, 'D')  # Convert to day precision
+                np_date = np.datetime64(date_obg, 'D')
                 result_date = np.busday_offset(np_date, days, roll='forward')
                 merge_data[tag] = result_date.astype('datetime64[ms]').astype(datetime).strftime('%d.%m.%Y')
             elif action == "отнять рабочих дней":
                 date_obg = datetime.strptime(value, '%d.%m.%Y')
                 days = int(rule)
-                np_date = np.datetime64(date_obg, 'D')  # Convert to day precision
+                np_date = np.datetime64(date_obg, 'D')
                 result_date = np.busday_offset(np_date, -days, roll='forward')
                 merge_data[tag] = result_date.astype('datetime64[ms]').astype(datetime).strftime('%d.%m.%Y')
             elif action == "обрезать":
@@ -2941,8 +2941,8 @@ def open_edit_rule_window(listbox, constructor_window):
         new_condition_combobox = ttk.Combobox(new_frame, textvariable=new_condition_var, width=20, state="readonly")
         new_condition_combobox['values'] = [
             "", "очистить", "очистить при не выполнении", "CAPS", "верхняя буква", "нижняя буква", "транслит",
-            "числа в слова", "добавить текст в начале", "добавить текст в конце", "добавить дней кален",
-            "добавить рабочих дней", "отнять рабочих дней" "отнять дней кален", "обрезать"
+            "числа в слова", "добавить текст в начале", "добавить текст в конце", "добавить дней кален", "отнять дней кален",
+            "добавить рабочих дней", "отнять рабочих дней", "обрезать"
         ]
         new_condition_combobox.grid(row=0, column=1, padx=5, pady=5)
         new_rule_var = tk.StringVar()

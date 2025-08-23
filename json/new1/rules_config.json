@@ -1,11 +1,11 @@
 [
     {
-        "name": "work",
+        "name": "calendar",
         "conditions": [],
         "behaviors": [
             {
                 "tag": "test4",
-                "condition": "добавить рабочих дней",
+                "condition": "отнять рабочих дней",
                 "rule": "23"
             }
         ]
