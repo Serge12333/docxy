@@ -1,1 +1,13 @@
-[]
+[
+    {
+        "name": "cr",
+        "conditions": [],
+        "behaviors": [
+            {
+                "tag": "ss",
+                "condition": "числа в слова",
+                "rule": "ru|USD"
+            }
+        ]
+    }
+]
