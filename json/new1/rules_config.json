@@ -1,23 +1,12 @@
 [
     {
-        "name": "cr",
+        "name": "work",
         "conditions": [],
         "behaviors": [
             {
-                "tag": "ss",
-                "condition": "числа в слова",
-                "rule": "ru|USD"
-            }
-        ]
-    },
-    {
-        "name": "crop",
-        "conditions": [],
-        "behaviors": [
-            {
-                "tag": "test1",
-                "condition": "обрезать",
-                "rule": "1:2"
+                "tag": "test4",
+                "condition": "добавить рабочих дней",
+                "rule": "23"
             }
         ]
     }

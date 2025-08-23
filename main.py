@@ -19,6 +19,8 @@ from decimal import Decimal
 import uuid
 from decimal import Decimal, getcontext
 from num2words import num2words
+import numpy as np
+
 
 # --- Globals ---
 # Main container for dynamically created widgets
@@ -2371,14 +2373,26 @@ def apply_behaviors(behaviors, merge_data):
                 merge_data[tag] = rule + str(value)
             elif action == "добавить текст в конце":
                 merge_data[tag] = str(value) + rule
-            elif action == "добавить дату":
+            elif action == "добавить дней кален":
                 date_obg = datetime.strptime(value, '%d.%m.%Y')
                 days = int(rule)
                 merge_data[tag] = (date_obg + timedelta(days=days)).strftime('%d.%m.%Y')
-            elif action == "отнять дату":
+            elif action == "отнять дней кален":
                 date_obg = datetime.strptime(value, '%d.%m.%Y')
                 days = int(rule)
                 merge_data[tag] = (date_obg - timedelta(days=days)).strftime('%d.%m.%Y')
+            elif action == "добавить рабочих дней":
+                date_obg = datetime.strptime(value, '%d.%m.%Y')
+                days = int(rule)
+                np_date = np.datetime64(date_obg, 'D')  # Convert to day precision
+                result_date = np.busday_offset(np_date, days, roll='forward')
+                merge_data[tag] = result_date.astype('datetime64[ms]').astype(datetime).strftime('%d.%m.%Y')
+            elif action == "отнять рабочих дней":
+                date_obg = datetime.strptime(value, '%d.%m.%Y')
+                days = int(rule)
+                np_date = np.datetime64(date_obg, 'D')  # Convert to day precision
+                result_date = np.busday_offset(np_date, -days, roll='forward')
+                merge_data[tag] = result_date.astype('datetime64[ms]').astype(datetime).strftime('%d.%m.%Y')
             elif action == "обрезать":
                 if rule == "":
                     raise ValueError("Rule cannot be empty")
@@ -2576,7 +2590,7 @@ def open_create_rule_window(listbox, constructor_window):
     condition_combobox2 = ttk.Combobox(second_column_frame, textvariable=condition_var2, width=20, state="readonly",
                                        values=["", "очистить", "очистить при не выполнении", "CAPS", "верхняя буква",
                                                "нижняя буква", "транслит", "числа в слова", "добавить текст в начале",
-                                               "добавить текст в конце", "добавить дату", "отнять дату", "обрезать"])
+                                               "добавить текст в конце", "добавить дней кален", "отнять дней кален", "добавить рабочих дней", "отнять рабочих дней", "обрезать"])
     condition_combobox2.grid(row=0, column=1, padx=5, pady=5)
     rule_entry_var2 = tk.StringVar()
     rule_entry2 = tk.Entry(second_column_frame, textvariable=rule_entry_var2, width=20)  # Placeholder
@@ -2651,7 +2665,7 @@ def open_create_rule_window(listbox, constructor_window):
                                               values=["", "очистить", "очистить при не выполнении", "CAPS",
                                                       "верхняя буква", "нижняя буква", "транслит", "числа в слова",
                                                       "добавить текст в начале", "добавить текст в конце",
-                                                      "добавить дату", "отнять дату", "обрезать"])
+                                                      "добавить дней кален", "отнять дней кален", "добавить рабочих дней", "отнять рабочих дней", "обрезать"])
         new_condition_combobox.grid(row=0, column=1, padx=5, pady=5)
         new_rule_var = tk.StringVar()
         new_rule_entry = tk.Entry(new_frame, textvariable=new_rule_var, width=20)  # Placeholder
@@ -2724,9 +2738,15 @@ def open_create_rule_window(listbox, constructor_window):
                                      "транслит", "числа в слова"] and not rule:
                     messagebox.showwarning("Ошибка", "Введите правило для поведения.", parent=create_rule_window)
                     return
-                if condition in ["добавить дату", "отнять дату"] and not rule.isdigit():
+                if condition in ["добавить дней кален", "отнять дней кален"] and not rule.isdigit():
                     messagebox.showwarning("Ошибка",
-                                           "Для 'добавить дату' или 'отнять дату' введите количество дней в виде числа.",
+                                           "Для 'добавить дней кален' или 'отнять дней кален' введите количество дней в виде числа.",
+                                           parent=create_rule_window)
+                    return
+                if condition in ["добавить дней кален", "отнять дней кален", "добавить рабочих дней",
+                                 "отнять рабочих дней"] and not rule.isdigit():
+                    messagebox.showwarning("Ошибка",
+                                           "Для 'добавить дней кален', 'отнять дней кален', 'добавить рабочих дней' или 'отнять рабочих дней' введите количество дней в виде числа.",
                                            parent=create_rule_window)
                     return
                 if condition == "обрезать":
@@ -2921,8 +2941,8 @@ def open_edit_rule_window(listbox, constructor_window):
         new_condition_combobox = ttk.Combobox(new_frame, textvariable=new_condition_var, width=20, state="readonly")
         new_condition_combobox['values'] = [
             "", "очистить", "очистить при не выполнении", "CAPS", "верхняя буква", "нижняя буква", "транслит",
-            "числа в слова", "добавить текст в начале", "добавить текст в конце", "добавить дату", "отнять дату",
-            "обрезать"
+            "числа в слова", "добавить текст в начале", "добавить текст в конце", "добавить дней кален",
+            "добавить рабочих дней", "отнять рабочих дней" "отнять дней кален", "обрезать"
         ]
         new_condition_combobox.grid(row=0, column=1, padx=5, pady=5)
         new_rule_var = tk.StringVar()
@@ -3003,9 +3023,15 @@ def open_edit_rule_window(listbox, constructor_window):
                                      "очистить при не выполнении", "транслит", "числа в слова"] and not rule:
                     messagebox.showwarning("Ошибка", "Введите правило для поведения.", parent=edit_rule_window)
                     return
-                if condition in ["добавить дату", "отнять дату"] and not rule.isdigit():
+                if condition in ["добавить дней кален", "отнять дней кален"] and not rule.isdigit():
                     messagebox.showwarning("Ошибка",
-                                           "Для 'добавить дату' или 'отнять дату' введите количество дней в виде числа.",
+                                           "Для 'добавить дней кален' или 'отнять дней кален' введите количество дней в виде числа.",
+                                           parent=edit_rule_window)
+                    return
+                if condition in ["добавить дней кален", "отнять дней кален", "добавить рабочих дней",
+                                 "отнять рабочих дней"] and not rule.isdigit():
+                    messagebox.showwarning("Ошибка",
+                                           "Для 'добавить дней кален', 'отнять дней кален', 'добавить рабочих дней' или 'отнять рабочих дней' введите количество дней в виде числа.",
                                            parent=edit_rule_window)
                     return
                 if condition == "обрезать":

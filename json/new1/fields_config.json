@@ -8,5 +8,15 @@
         "name": "test2",
         "type": "числа",
         "tag_type": "поле"
+    },
+    {
+        "name": "test3",
+        "type": "текст",
+        "tag_type": "поле"
+    },
+    {
+        "name": "test4",
+        "type": "текст",
+        "tag_type": "поле"
     }
 ]
