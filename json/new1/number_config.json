@@ -1,0 +1,12 @@
+[
+    {
+        "name": "ss",
+        "type": "число",
+        "tag_type": "число",
+        "sequence": [
+            "test1",
+            "+",
+            "test2"
+        ]
+    }
+]

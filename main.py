@@ -19,6 +19,19 @@ from decimal import Decimal
 import uuid
 from decimal import Decimal, getcontext
 
+# --- Globals ---
+# Main container for dynamically created widgets
+dynamic_frame = None
+# Global dictionary to hold the state of dynamically created checkboxes
+checkbox_vars = {}
+# Global dictionary to hold selections from main-key comboboxes
+main_key_selections = {}
+getcontext().prec = 28
+
+ALL_TAG_VALUES = {}   # current values of all interactive tags (поля/списки/чекбоксы/комбобоксы)
+NUMBER_LABELS = {}
+
+
 class LocalizedAskString(simpledialog._QueryString):
     def body(self, master):
         self.result = None
@@ -42,13 +55,7 @@ def askstring_localized(title, prompt, **kwargs):
     return d.result
 
 
-# --- Globals ---
-# Main container for dynamically created widgets
-dynamic_frame = None
-# Global dictionary to hold the state of dynamically created checkboxes
-checkbox_vars = {}
-# Global dictionary to hold selections from main-key comboboxes
-main_key_selections = {}
+
 
 # Determine the base directory
 # Determine the base directory
@@ -220,6 +227,93 @@ def save_json(file_path, data):
         if os.path.exists(temp_file):
             os.remove(temp_file)
 
+def _norm_in_to_decimal_str(v: object) -> str:
+    """
+    Normalize any user/input value to a Decimal-compatible string with dot as separator.
+    Accepts '12,3' or '12.3'; non-numeric -> '0'.
+    """
+    s = str(v).strip().replace("\u00A0", "").replace(" ", "")
+    if not s:
+        return "0"
+    s = s.replace(",", ".")
+    try:
+        # Validation only; return the normalized string if Decimal accepts it
+        Decimal(s)
+        return s
+    except Exception:
+        return "0"
+
+def _fmt_out_from_decimal(d: Decimal) -> str:
+    """
+    Always show two decimals with a comma (e.g., 12,00).
+    """
+    try:
+        q = d.quantize(Decimal("0.01"))
+        return str(q).replace(".", ",")
+    except Exception:
+        return "0,00"
+
+def update_number_labels():
+    """
+    Recalculate ALL Число tags and update their labels.
+    Supports nested numbers (a number using another number) via a few resolving passes.
+    """
+    try:
+        numbers = load_number_config()
+    except Exception:
+        numbers = []
+
+    # quick lookup for names
+    number_names = {n.get("name") for n in numbers if "name" in n}
+    results = {name: "0,00" for name in number_names}
+
+    # Do a few passes to resolve dependencies between numbers
+    for _ in range(5):
+        for num in numbers:
+            name = num.get("name")
+            seq = num.get("sequence", [])
+            parts = []
+
+            for elem in seq:
+                # operators / brackets
+                if elem in ["+", "-", "*", "/", "(", ")"]:
+                    parts.append(elem)
+                    continue
+
+                # numeric literal
+                if isinstance(elem, (int, float)) or str(elem).replace(",", "").replace(".", "").lstrip("-").isdigit():
+                    s = _norm_in_to_decimal_str(elem)
+                    parts.append(f"Decimal('{s}')")
+                    continue
+
+                # reference to another tag (entry/combobox/checkbox)
+                if elem in ALL_TAG_VALUES:
+                    s = _norm_in_to_decimal_str(ALL_TAG_VALUES.get(elem, "0"))
+                    parts.append(f"Decimal('{s}')")
+                    continue
+
+                # reference to another number
+                if elem in number_names:
+                    s = _norm_in_to_decimal_str(results.get(elem, "0,00"))
+                    parts.append(f"Decimal('{s}')")
+                    continue
+
+                # anything else -> 0
+                parts.append("Decimal('0')")
+
+            expr = " ".join(parts) if parts else "Decimal('0')"
+            try:
+                val = eval(expr, {"Decimal": Decimal})
+                results[name] = _fmt_out_from_decimal(val)
+            except Exception:
+                results[name] = "0,00"
+
+    # Push results to visible labels
+    for name, value in results.items():
+        lbl = NUMBER_LABELS.get(name)
+        if lbl:
+            lbl.config(text=value)
+
 def load_number_config():
     """Loads Число tags configuration from JSON."""
     return load_json(NUMBER_CONFIG_PATH, 'number_config')
@@ -304,6 +398,7 @@ def refresh_all_windows(listbox_to_refresh):
         for widget in dynamic_frame.winfo_children():
             if widget._name == num['name']:
                 widget.config(text=val)
+    update_number_labels()
 
 
 
@@ -783,21 +878,29 @@ def get_next_grid_position():
 
 
 def add_dynamic_widget(name, data_type, tag_type, values=None, main_key_data=None, initial_value=None):
-    """Adds a new widget to the dynamic_frame, optionally with an initial value."""
-    global dynamic_frame, checkbox_vars, main_key_selections
+    """Adds a new widget to the dynamic_frame, optionally with an initial value.
+       Wires ALL_TAG_VALUES so Число labels update on the fly.
+    """
+    global dynamic_frame, checkbox_vars, main_key_selections, ALL_TAG_VALUES, NUMBER_LABELS
 
     row, base_col = get_next_grid_position()
 
-    label = tk.Label(dynamic_frame, text=f"{name}:")
-    label._name = f"{name}l"
-    label.grid(row=row, column=base_col, padx=5, pady=2, sticky="e")
+    # For 'число' we create its own paired labels below; skip the generic label here
+    if tag_type != "число":
+        label = tk.Label(dynamic_frame, text=f"{name}:")
+        label._name = f"{name}l"
+        label.grid(row=row, column=base_col, padx=5, pady=2, sticky="e")
 
     if tag_type == "поле":
-        entry = tk.Entry(dynamic_frame, width=25)
-        entry._name = name
+        var = tk.StringVar()
         if initial_value is not None:
-            entry.insert(0, str(initial_value))
+            var.set(str(initial_value))
+        entry = tk.Entry(dynamic_frame, textvariable=var, width=25)
+        entry._name = name
         entry.grid(row=row, column=base_col + 1, padx=5, pady=2, sticky="w")
+
+        ALL_TAG_VALUES[name] = var.get()
+        var.trace_add("write", lambda *args, v=var, n=name: (ALL_TAG_VALUES.__setitem__(n, v.get()), update_number_labels()))
 
     elif tag_type == "чекбокс":
         var = tk.IntVar()
@@ -808,13 +911,21 @@ def add_dynamic_widget(name, data_type, tag_type, values=None, main_key_data=Non
         checkbox._name = name
         checkbox.grid(row=row, column=base_col + 1, padx=5, pady=2, sticky="w")
 
+        ALL_TAG_VALUES[name] = var.get()
+        var.trace_add("write", lambda *args, v=var, n=name: (ALL_TAG_VALUES.__setitem__(n, v.get()), update_number_labels()))
+
     elif tag_type == "комбобокс":  # Regular combobox
-        combobox = tkentrycomplete.Combobox(dynamic_frame, values=values, width=22)
+        var = tk.StringVar()
+        combobox = tkentrycomplete.Combobox(dynamic_frame, values=values, textvariable=var, width=22)
         combobox._name = name
         if initial_value is not None:
-            combobox.set(initial_value)
+            var.set(initial_value)
         combobox.set_completion_list({v: {} for v in values})
         combobox.grid(row=row, column=base_col + 1, padx=5, pady=2, sticky="w")
+
+        ALL_TAG_VALUES[name] = var.get()
+        combobox.bind("<<ComboboxSelected>>", lambda e, v=var, n=name: (ALL_TAG_VALUES.__setitem__(n, v.get()), update_number_labels()))
+        var.trace_add("write", lambda *args, v=var, n=name: (ALL_TAG_VALUES.__setitem__(n, v.get()), update_number_labels()))
 
     elif tag_type == "список":  # Main-key combobox
         var = tk.StringVar()
@@ -824,21 +935,41 @@ def add_dynamic_widget(name, data_type, tag_type, values=None, main_key_data=Non
         combobox._name = name
         combobox.set_completion_list(main_key_data)
 
-        def on_select(event, widget_name=name, data=main_key_data):
-            selected_key = event.widget.get()
+        def on_select(event=None, widget_name=name, data=main_key_data, v=var):
+            selected_key = v.get()
             if selected_key in data:
                 main_key_selections[widget_name] = data[selected_key]
             elif widget_name in main_key_selections:
                 del main_key_selections[widget_name]
+            ALL_TAG_VALUES[widget_name] = v.get()
+            update_number_labels()
 
         combobox.bind('<<ComboboxSelected>>', on_select)
         combobox.bind('<FocusOut>', on_select)
         combobox.bind('<Return>', on_select)
         combobox.grid(row=row, column=base_col + 1, padx=5, pady=2, sticky="w")
 
+        ALL_TAG_VALUES[name] = var.get()
+        var.trace_add("write", lambda *args, v=var, n=name: (ALL_TAG_VALUES.__setitem__(n, v.get()), update_number_labels()))
+
+    elif tag_type == "число":
+        # Name label + value label
+        label_name = tk.Label(dynamic_frame, text=f"{name}:")
+        label_name._name = f"{name}l"
+        label_name.grid(row=row, column=base_col, padx=5, pady=2, sticky="e")
+
+        value_label = tk.Label(dynamic_frame, text="0,00")  # default display
+        value_label._name = name
+        value_label.grid(row=row, column=base_col + 1, padx=5, pady=2, sticky="w")
+
+        NUMBER_LABELS[name] = value_label  # keep reference for live updates
+
+
 
 def load_all_dynamic_widgets(initial_state=None):
     """Loads all configured UI elements, optionally applying an initial state."""
+
+    NUMBER_LABELS.clear()
     if initial_state is None:
         initial_state = {}
 
@@ -886,6 +1017,7 @@ def load_all_dynamic_widgets(initial_state=None):
     for idx, (name, data_type, tag_type, values, main_key_data) in enumerate(ordered_widgets):
         saved_value = initial_state.get(name)
         add_dynamic_widget(name, data_type, tag_type, values, main_key_data, initial_value=saved_value)
+    update_number_labels()
 
 
 def get_all_tags_for_constructor():
@@ -3061,5 +3193,4 @@ if __name__ == "__main__":
         start_main_window()
     else:
         show_welcome_window()
-
 
