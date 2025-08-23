@@ -1773,6 +1773,9 @@ def open_combination_window(listbox, item_to_edit, parent_window):
             return
 
     all_tags = get_all_tags_for_constructor()
+    numbers = load_number_config()
+    for num in numbers:
+        all_tags.append(num['name'])
     sorted_tags = sorted(list(all_tags))
 
     def refresh_listbox():
@@ -1940,7 +1943,13 @@ def open_number_window(listbox, item_to_edit, parent_window):
             name_var.set(existing['name'])
             sequence = existing['sequence'][:]
 
-    all_tags = get_all_tags_for_constructor()
+    all_tags = list(get_all_tags_for_constructor())
+
+    numbers = load_number_config()
+    for num in numbers:
+        all_tags.append(num['name'])
+
+    all_tags = sorted(all_tags)
     operators = ["+", "-", "*", "/"]
 
     def refresh_listbox():
@@ -2421,7 +2430,13 @@ def open_create_rule_window(listbox, constructor_window):
     create_rule_window.grab_set()
 
     # Get all tags, sort them, and add a blank option at the start
-    sorted_tags = sorted(list(set(get_all_tags_for_constructor())))
+    all_tags = list(set(get_all_tags_for_constructor()))
+
+    numbers = load_number_config()
+    for num in numbers:
+        all_tags.append(num['name'])
+
+    sorted_tags = sorted(all_tags)
     sorted_tags.insert(0, '')
 
     main_frame = tk.Frame(create_rule_window)
