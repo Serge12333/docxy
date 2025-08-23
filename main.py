@@ -2380,13 +2380,37 @@ def apply_behaviors(behaviors, merge_data):
                 days = int(rule)
                 merge_data[tag] = (date_obg - timedelta(days=days)).strftime('%d.%m.%Y')
             elif action == "обрезать":
-                if ':' not in rule:
-                    raise ValueError("Rule must be in 'start:end' format")
-                start, end = map(int, rule.split(':'))
-                if start <= end:
-                    merge_data[tag] = value[:start] + value[end + 1:] if 0 <= start <= end < len(value) else value
+                if rule == "":
+                    raise ValueError("Rule cannot be empty")
+
+                # Handle single number (e.g., ":4" or "4:")
+                if rule.startswith(":"):
+                    try:
+                        end = int(rule[1:])
+                        if end >= 0:
+                            merge_data[tag] = value[:-end] if end <= len(value) else value
+                        else:
+                            raise ValueError("End index must be non-negative")
+                    except ValueError:
+                        raise ValueError("Rule must be in ':end' format with a valid integer")
+                elif rule.endswith(":"):
+                    try:
+                        start = int(rule[:-1])
+                        if start >= 0:
+                            merge_data[tag] = value[start:] if start < len(value) else value
+                        else:
+                            raise ValueError("Start index must be non-negative")
+                    except ValueError:
+                        raise ValueError("Rule must be in 'start:' format with a valid integer")
                 else:
-                    merge_data[tag] = value[:end] + value[start + 1:] if 0 <= end <= start < len(value) else value
+                    # Existing logic for "start:end" format
+                    if ':' not in rule:
+                        raise ValueError("Rule must be in 'start:end', ':end', or 'start:' format")
+                    start, end = map(int, rule.split(':'))
+                    if start <= end:
+                        merge_data[tag] = value[:start] + value[end + 1:] if 0 <= start <= end < len(value) else value
+                    else:
+                        merge_data[tag] = value[:end] + value[start + 1:] if 0 <= end <= start < len(value) else value
 
             # --- NEW: числа в слова ---
             elif action == "числа в слова":
@@ -2705,10 +2729,17 @@ def open_create_rule_window(listbox, constructor_window):
                                            "Для 'добавить дату' или 'отнять дату' введите количество дней в виде числа.",
                                            parent=create_rule_window)
                     return
-                if condition == "обрезать" and not all(part.isdigit() for part in rule.split(':')):
-                    messagebox.showwarning("Ошибка", "Для 'обрезать' введите диапазон в формате 'start:end' с числами.",
-                                           parent=create_rule_window)
-                    return
+                if condition == "обрезать":
+                    parts = rule.split(':')
+                    if len(parts) != 2 or not (
+                            (parts[0] == '' and parts[1].isdigit()) or  # :end format
+                            (parts[1] == '' and parts[0].isdigit()) or  # start: format
+                            (parts[0].isdigit() and parts[1].isdigit())  # start:end format
+                    ):
+                        messagebox.showwarning("Ошибка",
+                                               "Для 'обрезать' введите диапазон в формате 'start:end', ':end' или 'start:' с числами.",
+                                               parent=create_rule_window)
+                        return
                 behaviors.append({'tag': tag, 'condition': condition, 'rule': rule})
 
         if not conditions and not behaviors:
@@ -2977,10 +3008,17 @@ def open_edit_rule_window(listbox, constructor_window):
                                            "Для 'добавить дату' или 'отнять дату' введите количество дней в виде числа.",
                                            parent=edit_rule_window)
                     return
-                if condition == "обрезать" and not all(part.isdigit() for part in rule.split(':')):
-                    messagebox.showwarning("Ошибка", "Для 'обрезать' введите диапазон в формате 'start:end' с числами.",
-                                           parent=edit_rule_window)
-                    return
+                if condition == "обрезать":
+                    parts = rule.split(':')
+                    if len(parts) != 2 or not (
+                            (parts[0] == '' and parts[1].isdigit()) or  # :end format
+                            (parts[1] == '' and parts[0].isdigit()) or  # start: format
+                            (parts[0].isdigit() and parts[1].isdigit())  # start:end format
+                    ):
+                        messagebox.showwarning("Ошибка",
+                                               "Для 'обрезать' введите диапазон в формате 'start:end', ':end' или 'start:' с числами.",
+                                               parent=edit_rule_window)
+                        return
                 behaviors.append({'tag': tag, 'condition': condition, 'rule': rule})
 
         updated_rules = [rule for rule in rules_config if rule['name'] != rule_name]

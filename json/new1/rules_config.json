@@ -9,5 +9,16 @@
                 "rule": "ru|USD"
             }
         ]
+    },
+    {
+        "name": "crop",
+        "conditions": [],
+        "behaviors": [
+            {
+                "tag": "test1",
+                "condition": "обрезать",
+                "rule": "1:2"
+            }
+        ]
     }
 ]
