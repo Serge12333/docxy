@@ -741,7 +741,6 @@ def import_fields():
     if not messagebox.askyesno("Подтверждение", "Вы уверены, что хотите импортировать поля из файла 'field_import'?"):
         return
 
-
     # Define file paths relative to the import folder
     xlsx_path = os.path.join(IMPORT_FLD, "field_import.xlsx")
     xls_path = os.path.join(IMPORT_FLD, "field_import.xls")
@@ -760,10 +759,10 @@ def import_fields():
         wb = openpyxl.load_workbook(file_path)
         sheet = wb.active
 
-        # Validate at least two columns
+        # Validate at least two columns (name + value)
         if sheet.max_column < 2:
             messagebox.showerror("Ошибка",
-                                 "Ошибка: Файл 'field_import' поврежден или не содержит двух столбцов с данными.")
+                                 "Ошибка: Файл 'field_import' поврежден или не содержит как минимум двух столбцов (имя, значение).")
             return
 
         # Initialize counters and tracking
@@ -782,10 +781,24 @@ def import_fields():
         for row in sheet.iter_rows(values_only=True):
             field_name = row[0]
             field_value = row[1]
+            field_type = row[2] if len(row) >= 3 else None  # optional third column
 
             # Skip rows with empty field name
             if not field_name or not str(field_name).strip():
                 continue
+
+            # Normalize field type
+            if not field_type or str(field_type).strip() == "":
+                field_type = "текст"  # default
+            else:
+                field_type = str(field_type).strip().lower()
+                if field_type not in ["текст", "числа", "дата"]:
+                    messagebox.showerror(
+                        "Ошибка",
+                        f"Ошибка: Недопустимый тип '{field_type}' для поля '{field_name}'. "
+                        f"Разрешенные типы: текст, числа, дата."
+                    )
+                    return  # cancel whole import
 
             # Check for duplicate field name (case-insensitive)
             field_name_lower = str(field_name).lower()
@@ -813,8 +826,7 @@ def import_fields():
                 if tag_type == "поле":
                     found = False
                     for widget in dynamic_frame.winfo_children():
-                        if hasattr(widget, "_name") and widget._name.lower() == field_name_lower and isinstance(widget,
-                                                                                                                tk.Entry):
+                        if hasattr(widget, "_name") and widget._name.lower() == field_name_lower and isinstance(widget, tk.Entry):
                             widget.delete(0, tk.END)
                             widget.insert(0, value_map[field_name_lower])
                             values_imported += 1
@@ -822,22 +834,17 @@ def import_fields():
                             break
                     if not found:
                         print(f"Warning: No Entry widget found for existing field '{field_name}'")
-                # Skip non-"поле" fields
                 continue
 
             # Create new field if unique
-            if field_name_lower not in [item["name"].lower() for config in
-                                        [fields_config, combobox_regular, combobox_mainkey, combination_config] for item
-                                        in config]:
-                fields_config.append({
-                    "name": str(field_name),
-                    "type": "текст",
-                    "tag_type": "поле"
-                })
-                # Add widget to dynamic_frame with value
-                add_dynamic_widget(str(field_name), "текст", "поле", value_map[field_name_lower])
-                fields_created += 1
-                values_imported += 1  # Count value even if empty, as it's applied
+            fields_config.append({
+                "name": str(field_name),
+                "type": field_type,
+                "tag_type": "поле"
+            })
+            add_dynamic_widget(str(field_name), field_type, "поле", value_map[field_name_lower])
+            fields_created += 1
+            values_imported += 1
 
         # Save updated fields config
         save_json(FIELDS_CONFIG_PATH, fields_config)
@@ -854,12 +861,18 @@ def import_fields():
                     widget.insert(0, value_map[field_name_lower])
 
         # Show feedback
-        messagebox.showinfo("Импорт завершен",
-                            f"{fields_created} полей было импортировано, {values_imported} значений было импортировано.")
+        messagebox.showinfo(
+            "Импорт завершен",
+            f"{fields_created} полей было импортировано, {values_imported} значений было импортировано."
+        )
 
     except Exception as e:
-        messagebox.showerror("Ошибка", "Ошибка: Файл 'field_import' поврежден или не содержит двух столбцов с данными.")
+        messagebox.showerror(
+            "Ошибка",
+            "Ошибка: Файл 'field_import' поврежден или не содержит необходимых столбцов (имя, значение, тип)."
+        )
         print(f"Import error: {str(e)}")
+
 
 
 def get_next_grid_position():

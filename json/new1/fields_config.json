@@ -18,5 +18,20 @@
         "name": "test4",
         "type": "текст",
         "tag_type": "поле"
+    },
+    {
+        "name": "test_field1",
+        "type": "текст",
+        "tag_type": "поле"
+    },
+    {
+        "name": "test_field3",
+        "type": "текст",
+        "tag_type": "поле"
+    },
+    {
+        "name": "test_field4",
+        "type": "числа",
+        "tag_type": "поле"
     }
 ]
