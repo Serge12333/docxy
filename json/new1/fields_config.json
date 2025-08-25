@@ -33,5 +33,10 @@
         "name": "test_field4",
         "type": "числа",
         "tag_type": "поле"
+    },
+    {
+        "name": "ddd",
+        "type": "чекбокс",
+        "tag_type": "чекбокс"
     }
 ]

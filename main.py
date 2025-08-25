@@ -163,6 +163,13 @@ def get_autoload_project():
 def set_current_project(name):
     """Активирует проект и перенастраивает все пути."""
     global CURRENT_PROJECT, JSON_DIR, TEMPLATES_DIR, PROCESSED_DIR
+    global FIELDS_CONFIG_PATH, COMBOBOX_REGULAR_PATH, COMBOBOX_MAINKEY_PATH
+    global COMBINATION_CONFIG_PATH, RULES_CONFIG_PATH, ALL_TAGS_OUTPUT_PATH
+    global NUMBER_CONFIG_PATH, INPUT_STATE_PATH
+
+    # Remove the `if` statement that calls `prompt_before_switch`
+    # and all the code inside of it.
+
     CURRENT_PROJECT = name
 
     JSON_DIR = os.path.join(BASE_DIR, "json", CURRENT_PROJECT)
@@ -174,10 +181,6 @@ def set_current_project(name):
     os.makedirs(TEMPLATES_DIR, exist_ok=True)
     os.makedirs(PROCESSED_DIR, exist_ok=True)
 
-    global FIELDS_CONFIG_PATH, COMBOBOX_REGULAR_PATH, COMBOBOX_MAINKEY_PATH
-    global COMBINATION_CONFIG_PATH, RULES_CONFIG_PATH, ALL_TAGS_OUTPUT_PATH
-    global NUMBER_CONFIG_PATH
-
     FIELDS_CONFIG_PATH = os.path.join(JSON_DIR, "fields_config.json")
     COMBOBOX_REGULAR_PATH = os.path.join(JSON_DIR, "combobox_regular.json")
     COMBOBOX_MAINKEY_PATH = os.path.join(JSON_DIR, "combobox_mainkey.json")
@@ -185,10 +188,14 @@ def set_current_project(name):
     RULES_CONFIG_PATH = os.path.join(JSON_DIR, "rules_config.json")
     ALL_TAGS_OUTPUT_PATH = os.path.join(JSON_DIR, "all_tags.json")
     NUMBER_CONFIG_PATH = os.path.join(JSON_DIR, "number_config.json")
+    INPUT_STATE_PATH = os.path.join(JSON_DIR, "input_state.json")
+
 
 IMPORT_FLD = os.path.join(BASE_DIR, 'import_fld')
 
 # --- Utility and Core Logic Functions ---
+
+
 
 def _onKeyRelease(event):
     """Handles Ctrl+C, Ctrl+V, Ctrl+X for entry widgets."""
@@ -229,6 +236,27 @@ def save_json(file_path, data):
         messagebox.showerror("Ошибка", f"Не удалось сохранить конфигурацию в {file_path}: {e}")
         if os.path.exists(temp_file):
             os.remove(temp_file)
+
+
+def save_input_state():
+    """Save current user input values to input_state.json."""
+    if not dynamic_frame or not dynamic_frame.winfo_exists():
+        return  # Nothing to save
+    state = get_current_widget_values(dynamic_frame)
+    if isinstance(state, dict):
+        save_json(INPUT_STATE_PATH, state)
+
+
+def load_input_state():
+    """Load previously saved input values (if any)."""
+    try:
+        data = load_json(INPUT_STATE_PATH, 'input_state')
+        if isinstance(data, dict):
+            return data
+        else:
+            return {}
+    except Exception:
+        return {}
 
 def _norm_in_to_decimal_str(v: object) -> str:
     """
@@ -733,6 +761,68 @@ def submit_and_save():
             message=f"Произошла ошибка при формировании документов: {e}"
         )
 
+def clear_all_inputs():
+    """Reset all entryboxes, checkboxes, and comboboxes inside dynamic_frame."""
+    global dynamic_frame, checkbox_vars, main_key_selections, ALL_TAG_VALUES
+
+    if not dynamic_frame:
+        return
+
+    for widget in dynamic_frame.winfo_children():
+        if isinstance(widget, tk.Entry):
+            widget.delete(0, tk.END)
+        elif isinstance(widget, ttk.Combobox):
+            widget.set("")
+        elif isinstance(widget, ttk.Checkbutton):
+            var = checkbox_vars.get(widget._name)
+            if var:
+                var.set(0)
+
+    # Also clear global state
+    ALL_TAG_VALUES.clear()
+    main_key_selections.clear()
+
+
+def on_closing():
+    """Handle closing of the main window with option to keep or erase data."""
+    answer = messagebox.askyesnocancel(
+        "Выход",
+        "Вы хотите сохранить введённые данные?\n"
+        "Да = оставить данные на месте\n"
+        "Нет = очистить все данные\n"
+        "Отмена = вернуться"
+    )
+    if answer is None:  # Cancel
+        return
+    elif answer:  # Yes → Save and keep data
+        save_input_state()
+        window.destroy()
+    else:  # No → Erase all inputs and clear JSON
+        clear_all_inputs()
+        save_json(INPUT_STATE_PATH, {})  # overwrite with empty JSON
+        window.destroy()
+
+def prompt_before_switch():
+    """Ask user whether to keep or clear data when switching projects."""
+    answer = messagebox.askyesnocancel(
+        "Переключение проекта",
+        "Вы хотите сохранить введённые данные перед переключением?\n"
+        "Да = сохранить данные\n"
+        "Нет = очистить все данные\n"
+        "Отмена = вернуться"
+    )
+    if answer is None:  # Cancel
+        return False
+    elif answer:  # Yes → Save
+        save_input_state()
+        return True
+    else:  # No → Clear
+        try:
+            clear_all_inputs()
+        except Exception:
+            pass
+        save_json(INPUT_STATE_PATH, {})
+        return True
 
 def import_fields():
     global dynamic_frame
@@ -986,8 +1076,10 @@ def load_all_dynamic_widgets(initial_state=None):
     """Loads all configured UI elements, optionally applying an initial state."""
 
     NUMBER_LABELS.clear()
+
+    # If no state passed in, load from saved JSON
     if initial_state is None:
-        initial_state = {}
+        initial_state = load_input_state()
 
     fields_list = []
     comboboxes_list = []
@@ -3134,6 +3226,7 @@ def start_main_window():
     window = tk.Tk()
     window.title("Doxy v2.1")
     window.resizable(False, False)
+    window.protocol("WM_DELETE_WINDOW", on_closing)
 
     # Set main window icon
     try:
@@ -3165,9 +3258,28 @@ def start_main_window():
     report_button = ttk.Button(bottom_frame, text="Сформировать", command=submit_and_save)
 
     def switch_to_projects():
-        if messagebox.askyesno("Подтверждение", "Закрыть текущий проект и вернуться к выбору проектов?"):
+        """
+        Показывает диалог сохранения/стирания данных перед переключением на окно
+        выбора проектов.
+        """
+        answer = messagebox.askyesnocancel(
+            "Переход к проектам",
+            "Вы хотите сохранить введённые данные текущего проекта?\n"
+            "Да = сохранить данные\n"
+            "Нет = очистить все данные\n"
+            "Отмена = вернуться"
+        )
+        if answer is None:  # Отмена
+            return
+        elif answer:  # Да -> Сохранить и перейти
+            save_input_state()
             window.destroy()
-            show_welcome_window()  # reopen welcome window
+            show_welcome_window()
+        else:  # Нет -> Очистить и перейти
+            clear_all_inputs()
+            save_json(INPUT_STATE_PATH, {})
+            window.destroy()
+            show_welcome_window()
 
     projects_button = ttk.Button(bottom_frame, text="Проекты", command=switch_to_projects)
 
