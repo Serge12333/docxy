@@ -323,6 +323,17 @@ def update_number_labels():
                     parts.append(f"Decimal('{s}')")
                     continue
 
+                # reference to a subkey inside main_key selections
+                found_subkey = False
+                for subdict in main_key_selections.values():
+                    if elem in subdict:
+                        s = _norm_in_to_decimal_str(subdict.get(elem, "0"))
+                        parts.append(f"Decimal('{s}')")
+                        found_subkey = True
+                        break
+                if found_subkey:
+                    continue
+
                 # reference to another number
                 if elem in number_names:
                     s = _norm_in_to_decimal_str(results.get(elem, "0,00"))
@@ -2564,23 +2575,45 @@ getcontext().prec = 28
 def evaluate_number_sequence(sequence, merge_data):
     expr_parts = []
     for elem in sequence:
-        if elem in merge_data:  # tag
+        # --- tag from merge_data ---
+        if elem in merge_data:
             val = merge_data.get(elem, "0")
             try:
                 val = str(val).replace(",", ".")
-                Decimal(val)  # check
+                Decimal(val)  # check if numeric
             except:
                 val = "0"
             expr_parts.append(f"Decimal('{val}')")
-        elif elem in ["+", "-", "*", "/", "(", ")"]:
+            continue
+
+        # --- subkey from main_key selections ---
+        found_subkey = False
+        for subdict in main_key_selections.values():
+            if elem in subdict:
+                val = subdict.get(elem, "0")
+                try:
+                    val = str(val).replace(",", ".")
+                    Decimal(val)
+                except:
+                    val = "0"
+                expr_parts.append(f"Decimal('{val}')")
+                found_subkey = True
+                break
+        if found_subkey:
+            continue
+
+        # --- math operators ---
+        if elem in ["+", "-", "*", "/", "(", ")"]:
             expr_parts.append(elem)
-        else:  # digit
-            try:
-                val = str(elem).replace(",", ".")
-                Decimal(val)
-            except:
-                val = "0"
-            expr_parts.append(f"Decimal('{val}')")
+            continue
+
+        # --- numeric literal ---
+        try:
+            val = str(elem).replace(",", ".")
+            Decimal(val)
+        except:
+            val = "0"
+        expr_parts.append(f"Decimal('{val}')")
 
     expr = " ".join(expr_parts)
     try:
@@ -3412,4 +3445,3 @@ if __name__ == "__main__":
         start_main_window()
     else:
         show_welcome_window()
-
