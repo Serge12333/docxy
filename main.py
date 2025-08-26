@@ -573,6 +573,11 @@ def get_common_merge_data():
     for data_dict in main_key_selections.values():
         merge_data.update(data_dict)
 
+    numbers = load_number_config()
+    for num in numbers:
+        val = evaluate_number_sequence(num['sequence'], merge_data)
+        merge_data[num['name']] = val
+
     # Include combined tags
     combination_config = load_combination_config()  # Make sure this function exists
     for combo in combination_config:
@@ -586,11 +591,6 @@ def get_common_merge_data():
         merge_data[combo['name']] = combined_value
 
     # Include numbers
-    numbers = load_number_config()
-    for num in numbers:
-        val = evaluate_number_sequence(num['sequence'], merge_data)
-        merge_data[num['name']] = val
-
 
     return merge_data
 
