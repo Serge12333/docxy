@@ -469,6 +469,11 @@ def export_all_tags_to_json(parent_window):
         for combo in combination_config:
             all_tags.add(combo['name'])
 
+        number_config = load_number_config()
+        for num in number_config:
+            all_tags.add(num['name'])
+
+
         # Sort the final list alphabetically (case-insensitive)
         sorted_tags_list = sorted(list(all_tags), key=str.lower)
 
